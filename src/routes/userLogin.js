@@ -55,6 +55,14 @@ router.post("/login", async (req, res) => {
 
     // Generate JWT token
 
+    const isProd = process.env.NODE_ENV === "production";
+    const cookieOptions = {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? "none" : "lax",
+      path: "/",
+    };
+
     jwt.sign(
       { id: user.id, email: user.email },
       process.env.JWT_SECRET,
@@ -66,20 +74,12 @@ router.post("/login", async (req, res) => {
         }
 
         // Clear any existing auth cookies first
-        res.clearCookie("authToken", {
-          httpOnly: false,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: "lax",
-          path: "/",
-        });
+        res.clearCookie("authToken", cookieOptions);
 
         // Set new cookie with fresh token
         res.cookie("authToken", token, {
-          httpOnly: false,
-          secure: process.env.NODE_ENV === "production",
+          ...cookieOptions,
           maxAge: 2 * 60 * 60 * 1000, // 2 hours
-          sameSite: "lax",
-          path: "/",
         });
 
         console.log(`User logged in: ID=${user.id}, Email=${user.email}`);

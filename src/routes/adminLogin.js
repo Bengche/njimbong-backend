@@ -34,6 +34,14 @@ router.post("/login", async (req, res) => {
         .json({ message: "Invalid admin email or password" });
     }
 
+    const isProd = process.env.NODE_ENV === "production";
+    const cookieOptions = {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? "none" : "lax",
+      path: "/",
+    };
+
     // Admin authenticated, generate JWT token
     const token = jwt.sign(
       { email: process.env.ADMIN_EMAIL, isAdmin: true },
@@ -43,17 +51,11 @@ router.post("/login", async (req, res) => {
 
     // Set cookie (for requests that use cookies)
     res.cookie("adminAuthToken", token, {
-      httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      ...cookieOptions,
       maxAge: 60 * 60 * 1000, // 1 hour
     });
 
-    // Also return token in response body for frontend to store
-    res.status(200).json({
-      message: "Admin login successful",
-      token: token,
-    });
+    res.status(200).json({ message: "Admin login successful" });
   } catch (error) {
     console.error("Error during admin login:", error);
     res.status(500).json({ message: "Server error" });
