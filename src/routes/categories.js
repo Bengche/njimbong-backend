@@ -3,6 +3,7 @@ import db from "../db.js";
 import multer from "multer";
 import cloudinary from "../storage/cloudinary.js";
 import authMiddleware from "../Middleware/authMiddleware.js";
+import adminMiddleware from "../Middleware/adminMiddleware.js";
 
 const router = express.Router();
 
@@ -37,6 +38,7 @@ router.get("/categories", async (req, res) => {
 router.post(
   "/categories",
   authMiddleware,
+  adminMiddleware,
   upload.single("image"),
   async (req, res) => {
     const { name, slug, description, icon, imageurl, sortorder } = req.body;
@@ -111,6 +113,7 @@ router.post(
 router.put(
   "/categories/:id",
   authMiddleware,
+  adminMiddleware,
   upload.single("image"),
   async (req, res) => {
     const { id } = req.params;
@@ -167,7 +170,11 @@ router.put(
 );
 
 // Delete a category
-router.delete("/categories/:id", authMiddleware, async (req, res) => {
+router.delete(
+  "/categories/:id",
+  authMiddleware,
+  adminMiddleware,
+  async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -188,6 +195,7 @@ router.delete("/categories/:id", authMiddleware, async (req, res) => {
     console.error("Error deleting category:", error);
     res.status(500).json({ error: "Failed to delete category" });
   }
-});
+  }
+);
 
 export default router;
