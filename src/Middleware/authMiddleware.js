@@ -9,7 +9,10 @@ export default function authMiddleware(req, res, next) {
   if (debugAuth) {
     console.log("=== Auth Middleware ===");
     console.log("Path:", req.path);
-    console.log("Has Authorization header:", Boolean(req.headers.authorization));
+    console.log(
+      "Has Authorization header:",
+      Boolean(req.headers.authorization)
+    );
     console.log("Has auth cookies:", Boolean(req.cookies?.authToken));
     console.log("Has admin cookies:", Boolean(req.cookies?.adminAuthToken));
   }

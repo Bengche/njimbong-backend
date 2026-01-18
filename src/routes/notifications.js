@@ -74,7 +74,9 @@ router.put(
       res.status(200).json({ message: "All notifications marked as read" });
     } catch (error) {
       if (isMissingTableError(error)) {
-        return res.status(200).json({ message: "All notifications marked as read" });
+        return res
+          .status(200)
+          .json({ message: "All notifications marked as read" });
       }
       console.error("Error marking all notifications as read:", error);
       res
@@ -94,7 +96,9 @@ router.delete("/notifications/:id", authMiddleware, async (req, res) => {
     res.status(200).json({ message: "Notification deleted successfully" });
   } catch (error) {
     if (isMissingTableError(error)) {
-      return res.status(200).json({ message: "Notification deleted successfully" });
+      return res
+        .status(200)
+        .json({ message: "Notification deleted successfully" });
     }
     console.error("Error deleting notification:", error);
     res.status(500).json({ error: "Failed to delete notification" });
