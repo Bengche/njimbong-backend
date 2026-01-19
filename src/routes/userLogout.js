@@ -9,6 +9,9 @@ router.post("/logout", async (req, res) => {
       secure: isProd,
       sameSite: isProd ? "none" : "lax",
       path: "/",
+      ...(process.env.COOKIE_DOMAIN
+        ? { domain: process.env.COOKIE_DOMAIN }
+        : {}),
     });
     res.status(200).json({ message: "Logout successful" });
   } catch (error) {

@@ -40,19 +40,22 @@ router.post("/login", async (req, res) => {
       secure: isProd,
       sameSite: isProd ? "none" : "lax",
       path: "/",
+      ...(process.env.COOKIE_DOMAIN
+        ? { domain: process.env.COOKIE_DOMAIN }
+        : {}),
     };
 
     // Admin authenticated, generate JWT token
     const token = jwt.sign(
       { email: process.env.ADMIN_EMAIL, isAdmin: true },
       process.env.JWT_SECRET,
-      { expiresIn: "1h" }
+      { expiresIn: "6h" }
     );
 
     // Set cookie (for requests that use cookies)
     res.cookie("adminAuthToken", token, {
       ...cookieOptions,
-      maxAge: 60 * 60 * 1000, // 1 hour
+      maxAge: 6 * 60 * 60 * 1000, // 6 hours
     });
 
     res.status(200).json({ message: "Admin login successful" });

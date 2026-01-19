@@ -5,7 +5,10 @@ dotenv.config();
 
 const adminMiddleware = async (req, res, next) => {
   try {
-    if (req.user?.isAdmin === true || req.user?.email === process.env.ADMIN_EMAIL) {
+    if (
+      req.user?.isAdmin === true ||
+      req.user?.email === process.env.ADMIN_EMAIL
+    ) {
       return next();
     }
 

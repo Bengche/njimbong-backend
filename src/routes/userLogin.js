@@ -61,12 +61,15 @@ router.post("/login", async (req, res) => {
       secure: isProd,
       sameSite: isProd ? "none" : "lax",
       path: "/",
+      ...(process.env.COOKIE_DOMAIN
+        ? { domain: process.env.COOKIE_DOMAIN }
+        : {}),
     };
 
     jwt.sign(
       { id: user.id, email: user.email },
       process.env.JWT_SECRET,
-      { expiresIn: "2h" },
+      { expiresIn: "6h" },
       (err, token) => {
         if (err) {
           console.error("Error generating JWT:", err);
@@ -79,7 +82,7 @@ router.post("/login", async (req, res) => {
         // Set new cookie with fresh token
         res.cookie("authToken", token, {
           ...cookieOptions,
-          maxAge: 2 * 60 * 60 * 1000, // 2 hours
+          maxAge: 6 * 60 * 60 * 1000, // 6 hours
         });
 
         console.log(`User logged in: ID=${user.id}, Email=${user.email}`);
