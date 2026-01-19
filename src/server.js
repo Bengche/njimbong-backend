@@ -79,34 +79,59 @@ app.use(
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300,
+  max: 1000000000000000000000,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) =>
+    req.path === "/health" ||
+    req.path === "/" ||
+    req.path === "/favicon.ico" ||
+    req.path === "/api/user/me" ||
+    req.path === "/api/users/me",
+});
+
+const readOnlyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) =>
+    req.path === "/health" ||
+    req.path === "/" ||
+    req.path === "/favicon.ico" ||
+    req.path === "/api/user/me" ||
+    req.path === "/api/users/me",
+});
+
+const writeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1500,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) =>
+    req.path === "/health" ||
+    req.path === "/" ||
+    req.path === "/favicon.ico" ||
+    req.path === "/api/user/me" ||
+    req.path === "/api/users/me",
 });
 
 const authLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
-  max: 20,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-app.use(apiLimiter);
+app.use((req, res, next) => {
+  if (req.method === "GET") {
+    return readOnlyLimiter(req, res, next);
+  }
+  return writeLimiter(req, res, next);
+});
+
 app.use("/auth", authLimiter);
 app.use("/admin", authLimiter);
-
-app.get("/", (req, res) => {
-  res.status(200).json({ status: "ok" });
-});
-
-app.get("/health", (req, res) => {
-  res.status(200).json({ status: "ok" });
-});
-app.use("/register", registerUSER);
-app.use("/uploads", express.static("uploads"));
-app.use("/auth", userLogin);
-app.use("/admin", AdminLogin);
-app.use("/api", categories);
 app.use("/api", listings);
 app.use("/api", users);
 app.use("/api", kyc);
