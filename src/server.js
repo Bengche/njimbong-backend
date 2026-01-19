@@ -30,7 +30,7 @@ import db from "./db.js";
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = Number(process.env.PORT) || 8080;
 
 process.on("unhandledRejection", (reason) => {
   console.error("Unhandled Rejection:", reason);
