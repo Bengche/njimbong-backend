@@ -132,6 +132,7 @@ app.use((req, res, next) => {
 
 app.use("/auth", authLimiter);
 app.use("/admin", authLimiter);
+app.use("/admin", AdminLogin);
 app.use("/api", listings);
 app.use("/api", users);
 app.use("/api", kyc);
