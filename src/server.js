@@ -135,6 +135,7 @@ app.use("/admin", authLimiter);
 app.use("/admin", AdminLogin);
 app.use("/auth", userLogin);
 app.use("/auth", registerUSER);
+app.use("/register", registerUSER);
 app.use("/api", listings);
 app.use("/api", categories);
 app.use("/api", users);
