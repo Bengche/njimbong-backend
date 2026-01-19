@@ -147,6 +147,14 @@ app.use("/api", wishlist);
 app.use("/api/analytics", analytics);
 app.use("/auth", logout);
 
+app.get("/", (req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
 const ensureKycTriggers = async () => {
   try {
     const result = await db.query(
