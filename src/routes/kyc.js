@@ -6,6 +6,21 @@ import authMiddleware from "../Middleware/authMiddleware.js";
 
 const router = express.Router();
 
+const updateUserKycStatus = async (userId, status) => {
+  try {
+    const columnCheck = await db.query(
+      "SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'kyc_status'"
+    );
+    if (columnCheck.rowCount === 0) return;
+    await db.query("UPDATE users SET kyc_status = $1 WHERE id = $2", [
+      status,
+      userId,
+    ]);
+  } catch (error) {
+    console.warn("Failed to update users.kyc_status:", error);
+  }
+};
+
 // Configure multer for KYC document uploads
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -137,6 +152,8 @@ router.post(
         ]
       );
 
+      await updateUserKycStatus(userId, "pending");
+
       // Create notification for user
       await db.query(
         `INSERT INTO notifications 
@@ -256,6 +273,8 @@ router.put("/kyc/approve/:id", authMiddleware, async (req, res) => {
       kyc.userid,
     ]);
 
+    await updateUserKycStatus(kyc.userid, "approved");
+
     // Create notification for user
     await db.query(
       `INSERT INTO notifications 
@@ -307,6 +326,8 @@ router.put("/kyc/reject/:id", authMiddleware, async (req, res) => {
        WHERE id = $3`,
       [reason, adminId, id]
     );
+
+    await updateUserKycStatus(kyc.userid, "rejected");
 
     // Create notification for user
     await db.query(
