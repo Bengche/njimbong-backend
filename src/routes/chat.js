@@ -308,7 +308,7 @@ router.post(
 
         // Send notification to seller
         await db.query(
-          `INSERT INTO notifications (user_id, type, title, message, link)
+          `INSERT INTO notifications (userid, type, title, message, link)
            VALUES ($1, 'message', 'New Message', $2, $3)`,
           [
             sellerId,
@@ -363,7 +363,7 @@ router.post(
 
         // Send notification to the other user
         await db.query(
-          `INSERT INTO notifications (user_id, type, title, message, link)
+          `INSERT INTO notifications (userid, type, title, message, link)
            VALUES ($1, 'message', 'New Message', $2, $3)`,
           [sellerId, `Someone wants to chat with you`, `/chat`]
         );
@@ -569,7 +569,7 @@ router.post(
       // Send notification (wrapped in try-catch in case notifications table doesn't exist)
       try {
         await db.query(
-          `INSERT INTO notifications (user_id, type, title, message, link)
+          `INSERT INTO notifications (userid, type, title, message, link)
            VALUES ($1, 'message', 'New Message', $2, $3)`,
           [
             otherUserId,
@@ -725,7 +725,7 @@ router.post(
       // Send notification (wrapped in try-catch in case notifications table doesn't exist)
       try {
         await db.query(
-          `INSERT INTO notifications (user_id, type, title, message, link)
+          `INSERT INTO notifications (userid, type, title, message, link)
            VALUES ($1, 'message', 'New Message', $2, $3)`,
           [
             otherUserId,
