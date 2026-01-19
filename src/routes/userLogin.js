@@ -19,7 +19,7 @@ router.post("/login", async (req, res) => {
     // Use await directly, no callback
     const result = await db.query(
       "SELECT * FROM users WHERE email = $1 OR username = $2",
-      [email, email]
+      [email, email],
     );
 
     if (result.rows.length === 0) {
@@ -38,7 +38,7 @@ router.post("/login", async (req, res) => {
     try {
       const prefsResult = await db.query(
         "SELECT onboarding_complete FROM user_preferences WHERE user_id = $1",
-        [user.id]
+        [user.id],
       );
       if (prefsResult.rows.length > 0) {
         onboardingComplete = prefsResult.rows[0].onboarding_complete;
@@ -46,7 +46,7 @@ router.post("/login", async (req, res) => {
         // Create preferences record for new user
         await db.query(
           "INSERT INTO user_preferences (user_id, onboarding_complete) VALUES ($1, FALSE) ON CONFLICT (user_id) DO NOTHING",
-          [user.id]
+          [user.id],
         );
       }
     } catch (prefError) {
@@ -89,6 +89,7 @@ router.post("/login", async (req, res) => {
 
         res.status(200).json({
           message: "Login successful",
+          token,
           user: {
             id: user.id,
             name: user.name,
@@ -98,7 +99,7 @@ router.post("/login", async (req, res) => {
             onboardingComplete: onboardingComplete,
           },
         });
-      }
+      },
     );
   } catch (error) {
     console.error("Error during login:", error);

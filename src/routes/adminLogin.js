@@ -49,7 +49,7 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign(
       { email: process.env.ADMIN_EMAIL, isAdmin: true },
       process.env.JWT_SECRET,
-      { expiresIn: "6h" }
+      { expiresIn: "6h" },
     );
 
     // Set cookie (for requests that use cookies)
@@ -58,7 +58,7 @@ router.post("/login", async (req, res) => {
       maxAge: 6 * 60 * 60 * 1000, // 6 hours
     });
 
-    res.status(200).json({ message: "Admin login successful" });
+    res.status(200).json({ message: "Admin login successful", token });
   } catch (error) {
     console.error("Error during admin login:", error);
     res.status(500).json({ message: "Server error" });
