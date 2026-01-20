@@ -64,7 +64,7 @@ async function getConversationDetails(conversationId, userId) {
     LEFT JOIN users b ON c.buyer_id = b.id
     LEFT JOIN users s ON c.seller_id = s.id
     WHERE c.id = $1`,
-    [conversationId, userId]
+    [conversationId, userId],
   );
   return result.rows[0];
 }
@@ -139,7 +139,7 @@ router.get("/chat/conversations", authMiddleware, async (req, res) => {
         (c.seller_id = $1 AND c.is_archived_seller = $2)
       )
       ORDER BY c.last_message_at DESC NULLS LAST, c.created_at DESC`,
-      [userId, isArchived]
+      [userId, isArchived],
     );
 
     // Transform data to match frontend expected format
@@ -203,7 +203,7 @@ router.get("/chat/unread-count", authMiddleware, async (req, res) => {
          (c.buyer_id = $1 AND NOT c.is_archived_buyer) OR
          (c.seller_id = $1 AND NOT c.is_archived_seller)
        )`,
-      [userId]
+      [userId],
     );
 
     res.json({ unreadCount: parseInt(result.rows[0].total_unread) || 0 });
@@ -244,7 +244,7 @@ router.post(
       // Check if the other user exists
       const userCheck = await db.query(
         "SELECT id, name FROM users WHERE id = $1",
-        [sellerId]
+        [sellerId],
       );
 
       if (userCheck.rows.length === 0) {
@@ -255,7 +255,7 @@ router.post(
       if (listingId) {
         const listingCheck = await db.query(
           "SELECT id, userid FROM userlistings WHERE id = $1",
-          [listingId]
+          [listingId],
         );
 
         if (listingCheck.rows.length === 0) {
@@ -272,14 +272,14 @@ router.post(
         const existingConvo = await db.query(
           `SELECT id FROM conversations 
            WHERE listing_id = $1 AND buyer_id = $2 AND seller_id = $3`,
-          [listingId, buyerId, sellerId]
+          [listingId, buyerId, sellerId],
         );
 
         if (existingConvo.rows.length > 0) {
           // Return existing conversation
           const convoDetails = await getConversationDetails(
             existingConvo.rows[0].id,
-            buyerId
+            buyerId,
           );
           return res.json({
             conversation: convoDetails,
@@ -292,7 +292,7 @@ router.post(
           `INSERT INTO conversations (listing_id, buyer_id, seller_id)
            VALUES ($1, $2, $3)
            RETURNING id`,
-          [listingId, buyerId, sellerId]
+          [listingId, buyerId, sellerId],
         );
 
         // Create system message for new conversation
@@ -303,7 +303,7 @@ router.post(
             newConvo.rows[0].id,
             buyerId,
             "Conversation started about this listing",
-          ]
+          ],
         );
 
         // Send notification to seller
@@ -314,12 +314,12 @@ router.post(
             sellerId,
             `Someone is interested in your listing`,
             `/listing/${listingId}`,
-          ]
+          ],
         );
 
         const convoDetails = await getConversationDetails(
           newConvo.rows[0].id,
-          buyerId
+          buyerId,
         );
         return res.status(201).json({
           conversation: convoDetails,
@@ -332,13 +332,13 @@ router.post(
           `SELECT id FROM conversations 
            WHERE listing_id IS NULL 
            AND ((buyer_id = $1 AND seller_id = $2) OR (buyer_id = $2 AND seller_id = $1))`,
-          [buyerId, sellerId]
+          [buyerId, sellerId],
         );
 
         if (existingDirectConvo.rows.length > 0) {
           const convoDetails = await getConversationDetails(
             existingDirectConvo.rows[0].id,
-            buyerId
+            buyerId,
           );
           return res.json({
             conversation: convoDetails,
@@ -351,26 +351,26 @@ router.post(
           `INSERT INTO conversations (listing_id, buyer_id, seller_id)
            VALUES (NULL, $1, $2)
            RETURNING id`,
-          [buyerId, sellerId]
+          [buyerId, sellerId],
         );
 
         // Create system message for new direct conversation
         await db.query(
           `INSERT INTO messages (conversation_id, sender_id, message_type, content)
            VALUES ($1, $2, 'system', $3)`,
-          [newConvo.rows[0].id, buyerId, "Direct conversation started"]
+          [newConvo.rows[0].id, buyerId, "Direct conversation started"],
         );
 
         // Send notification to the other user
         await db.query(
           `INSERT INTO notifications (userid, type, title, message, link)
            VALUES ($1, 'message', 'New Message', $2, $3)`,
-          [sellerId, `Someone wants to chat with you`, `/chat`]
+          [sellerId, `Someone wants to chat with you`, `/chat`],
         );
 
         const convoDetails = await getConversationDetails(
           newConvo.rows[0].id,
-          buyerId
+          buyerId,
         );
         return res.status(201).json({
           conversation: convoDetails,
@@ -381,7 +381,7 @@ router.post(
       console.error("Error creating conversation:", error);
       res.status(500).json({ error: "Failed to create conversation" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -399,7 +399,7 @@ router.get(
       // Verify user is part of conversation
       const convoCheck = await db.query(
         "SELECT buyer_id, seller_id FROM conversations WHERE id = $1",
-        [conversationId]
+        [conversationId],
       );
 
       if (convoCheck.rows.length === 0) {
@@ -463,7 +463,7 @@ router.get(
          WHERE conversation_id = $1 
          AND sender_id != $2 
          AND status != 'read'`,
-        [conversationId, userId]
+        [conversationId, userId],
       );
 
       res.json({
@@ -474,7 +474,7 @@ router.get(
       console.error("Error fetching messages:", error);
       res.status(500).json({ error: "Failed to fetch messages" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -505,7 +505,7 @@ router.post(
       const convoCheck = await db.query(
         `SELECT buyer_id, seller_id, is_blocked_by_buyer, is_blocked_by_seller 
          FROM conversations WHERE id = $1`,
-        [conversationId]
+        [conversationId],
       );
 
       if (convoCheck.rows.length === 0) {
@@ -536,7 +536,7 @@ router.post(
         `INSERT INTO messages (conversation_id, sender_id, message_type, content, reply_to_id)
          VALUES ($1, $2, 'text', $3, $4)
          RETURNING id, conversation_id, sender_id, message_type, content, status, created_at, reply_to_id`,
-        [conversationId, userId, content.trim(), replyToId || null]
+        [conversationId, userId, content.trim(), replyToId || null],
       );
 
       const msg = result.rows[0];
@@ -544,7 +544,7 @@ router.post(
       // Get sender info for the response
       const senderResult = await db.query(
         `SELECT name, profilepictureurl FROM users WHERE id = $1`,
-        [userId]
+        [userId],
       );
       const sender = senderResult.rows[0];
 
@@ -556,7 +556,7 @@ router.post(
            FROM messages m
            JOIN users u ON m.sender_id = u.id
            WHERE m.id = $1`,
-          [msg.reply_to_id]
+          [msg.reply_to_id],
         );
         if (replyResult.rows[0]) {
           replyInfo = replyResult.rows[0];
@@ -575,7 +575,7 @@ router.post(
             otherUserId,
             `You have a new message`,
             `/chat?conversation=${conversationId}`,
-          ]
+          ],
         );
       } catch (notifErr) {
         console.log("Could not create notification:", notifErr.message);
@@ -592,7 +592,7 @@ router.post(
             msg.created_at,
             content.trim().substring(0, 100),
             conversationId,
-          ]
+          ],
         );
       } catch (updateErr) {
         console.log("Could not update conversation:", updateErr.message);
@@ -623,7 +623,7 @@ router.post(
       console.error("Error sending message:", error);
       res.status(500).json({ error: "Failed to send message" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -648,7 +648,7 @@ router.post(
       const convoCheck = await db.query(
         `SELECT buyer_id, seller_id, is_blocked_by_buyer, is_blocked_by_seller 
          FROM conversations WHERE id = $1`,
-        [conversationId]
+        [conversationId],
       );
 
       if (convoCheck.rows.length === 0) {
@@ -684,7 +684,7 @@ router.post(
           (error, result) => {
             if (error) reject(error);
             else resolve(result);
-          }
+          },
         );
 
         stream.end(req.file.buffer);
@@ -693,7 +693,7 @@ router.post(
       // Generate thumbnail URL
       const thumbnailUrl = uploadResult.secure_url.replace(
         "/upload/",
-        "/upload/c_thumb,w_200,h_200/"
+        "/upload/c_thumb,w_200,h_200/",
       );
 
       // Insert message
@@ -707,7 +707,7 @@ router.post(
           caption || null,
           uploadResult.secure_url,
           thumbnailUrl,
-        ]
+        ],
       );
 
       const message = result.rows[0];
@@ -715,7 +715,7 @@ router.post(
       // Get sender info for the response
       const senderResult = await db.query(
         `SELECT name, profilepictureurl FROM users WHERE id = $1`,
-        [userId]
+        [userId],
       );
       const sender = senderResult.rows[0];
 
@@ -731,7 +731,7 @@ router.post(
             otherUserId,
             `You received a photo`,
             `/chat?conversation=${conversationId}`,
-          ]
+          ],
         );
       } catch (notifErr) {
         console.log("Could not create notification:", notifErr.message);
@@ -743,7 +743,7 @@ router.post(
           `UPDATE conversations 
            SET last_message_id = $1, last_message_at = $2, last_message_preview = $3, updated_at = CURRENT_TIMESTAMP
            WHERE id = $4`,
-          [message.id, message.created_at, "📷 Photo", conversationId]
+          [message.id, message.created_at, "📷 Photo", conversationId],
         );
       } catch (updateErr) {
         console.log("Could not update conversation:", updateErr.message);
@@ -769,7 +769,7 @@ router.post(
       console.error("Error sending image:", error);
       res.status(500).json({ error: "Failed to send image" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -786,7 +786,7 @@ router.put(
       // Verify user is part of conversation
       const convoCheck = await db.query(
         "SELECT buyer_id, seller_id FROM conversations WHERE id = $1",
-        [conversationId]
+        [conversationId],
       );
 
       if (convoCheck.rows.length === 0) {
@@ -806,7 +806,7 @@ router.put(
          AND sender_id != $2 
          AND status != 'read'
          RETURNING id, read_at`,
-        [conversationId, userId]
+        [conversationId, userId],
       );
 
       // Return the IDs of messages that were marked as read
@@ -819,7 +819,7 @@ router.put(
       console.error("Error marking messages as read:", error);
       res.status(500).json({ error: "Failed to mark messages as read" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -837,7 +837,7 @@ router.get(
       // Verify user is part of conversation
       const convoCheck = await db.query(
         "SELECT buyer_id, seller_id FROM conversations WHERE id = $1",
-        [conversationId]
+        [conversationId],
       );
 
       if (convoCheck.rows.length === 0) {
@@ -858,7 +858,7 @@ router.get(
          AND NOT is_deleted
          ORDER BY created_at DESC
          LIMIT 100`,
-        [conversationId, userId]
+        [conversationId, userId],
       );
 
       // Get the ID of the last message that was read
@@ -878,7 +878,7 @@ router.get(
       console.error("Error fetching read receipts:", error);
       res.status(500).json({ error: "Failed to fetch read receipts" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -892,7 +892,7 @@ router.delete("/chat/messages/:messageId", authMiddleware, async (req, res) => {
     // Verify user owns the message
     const msgCheck = await db.query(
       "SELECT sender_id FROM messages WHERE id = $1",
-      [messageId]
+      [messageId],
     );
 
     if (msgCheck.rows.length === 0) {
@@ -910,7 +910,7 @@ router.delete("/chat/messages/:messageId", authMiddleware, async (req, res) => {
       `UPDATE messages 
          SET is_deleted = true, content = 'This message was deleted', image_url = NULL
          WHERE id = $1`,
-      [messageId]
+      [messageId],
     );
 
     res.json({ success: true });
@@ -935,7 +935,7 @@ router.put(
       // Verify user is part of conversation
       const convoCheck = await db.query(
         "SELECT buyer_id, seller_id FROM conversations WHERE id = $1",
-        [conversationId]
+        [conversationId],
       );
 
       if (convoCheck.rows.length === 0) {
@@ -960,7 +960,7 @@ router.put(
       console.error("Error archiving conversation:", error);
       res.status(500).json({ error: "Failed to archive conversation" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -978,7 +978,7 @@ router.put(
       // Verify user is part of conversation
       const convoCheck = await db.query(
         "SELECT buyer_id, seller_id FROM conversations WHERE id = $1",
-        [conversationId]
+        [conversationId],
       );
 
       if (convoCheck.rows.length === 0) {
@@ -1003,7 +1003,7 @@ router.put(
       console.error("Error blocking user:", error);
       res.status(500).json({ error: "Failed to block user" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -1036,7 +1036,7 @@ router.get(
         LEFT JOIN users b ON c.buyer_id = b.id
         LEFT JOIN users s ON c.seller_id = s.id
         WHERE c.id = $1`,
-        [conversationId]
+        [conversationId],
       );
 
       if (result.rows.length === 0) {
@@ -1106,7 +1106,7 @@ router.get(
         WHERE m.conversation_id = $1
         ORDER BY m.created_at DESC
         LIMIT 50`,
-        [conversationId]
+        [conversationId],
       );
 
       // Add is_mine flag to each message
@@ -1120,7 +1120,7 @@ router.get(
       console.error("Error fetching conversation:", error);
       res.status(500).json({ error: "Failed to fetch conversation" });
     }
-  }
+  },
 );
 
 export default router;
