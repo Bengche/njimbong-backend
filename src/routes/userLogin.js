@@ -18,7 +18,7 @@ router.post("/login", async (req, res) => {
   try {
     // Use await directly, no callback
     const result = await db.query(
-      "SELECT * FROM users WHERE email = $1 OR username = $2",
+      "SELECT * FROM users WHERE LOWER(email) = LOWER($1) OR username = $2",
       [email, email],
     );
 
