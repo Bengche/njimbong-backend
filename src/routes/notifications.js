@@ -16,7 +16,11 @@ router.post("/notifications/subscribe", authMiddleware, async (req, res) => {
   const { subscription } = req.body || {};
 
   try {
-    await upsertPushSubscription(userId, subscription, req.headers["user-agent"]);
+    await upsertPushSubscription(
+      userId,
+      subscription,
+      req.headers["user-agent"],
+    );
     res.status(200).json({ message: "Subscribed to push notifications" });
   } catch (error) {
     console.error("Error saving push subscription:", error);
@@ -49,13 +53,13 @@ router.get("/notifications/:userId", authMiddleware, async (req, res) => {
        WHERE userid = $1 
        ORDER BY createdat DESC 
        LIMIT $2 OFFSET $3`,
-      [userId, limit, offset]
+      [userId, limit, offset],
     );
 
     // Get unread count
     const unreadResult = await db.query(
       "SELECT COUNT(*) FROM notifications WHERE userid = $1 AND isread = FALSE",
-      [userId]
+      [userId],
     );
 
     res.status(200).json({
@@ -100,7 +104,7 @@ router.put(
     try {
       await db.query(
         "UPDATE notifications SET isread = TRUE WHERE userid = $1 AND isread = FALSE",
-        [userId]
+        [userId],
       );
 
       res.status(200).json({ message: "All notifications marked as read" });
@@ -115,7 +119,7 @@ router.put(
         .status(500)
         .json({ error: "Failed to mark all notifications as read" });
     }
-  }
+  },
 );
 
 // Delete notification
@@ -147,7 +151,7 @@ router.get(
     try {
       const result = await db.query(
         "SELECT COUNT(*) FROM notifications WHERE userid = $1 AND isread = FALSE",
-        [userId]
+        [userId],
       );
 
       res.status(200).json({ unreadCount: parseInt(result.rows[0].count) });
@@ -158,7 +162,7 @@ router.get(
       console.error("Error fetching unread count:", error);
       res.status(500).json({ error: "Failed to fetch unread count" });
     }
-  }
+  },
 );
 
 // Get new notifications since a timestamp (for browser push notifications)

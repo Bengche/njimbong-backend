@@ -347,7 +347,7 @@ router.post(
             body: "Someone is interested in your listing",
             url: `/chat?conversation=${newConvo.rows[0].id}`,
             conversationId: newConvo.rows[0].id,
-          })
+          }),
         );
 
         const convoDetails = await getConversationDetails(
@@ -398,7 +398,12 @@ router.post(
         await db.query(
           `INSERT INTO notifications (userid, type, title, message, relatedid, relatedtype)
            VALUES ($1, 'message', 'New Message', $2, $3, $4)`,
-          [sellerId, `Someone wants to chat with you`, newConvo.rows[0].id, "conversation"],
+          [
+            sellerId,
+            `Someone wants to chat with you`,
+            newConvo.rows[0].id,
+            "conversation",
+          ],
         );
 
         await sendPushToUser(
@@ -408,7 +413,7 @@ router.post(
             body: "Someone wants to chat with you",
             url: `/chat?conversation=${newConvo.rows[0].id}`,
             conversationId: newConvo.rows[0].id,
-          })
+          }),
         );
 
         const convoDetails = await getConversationDetails(
@@ -630,7 +635,7 @@ router.post(
             url: `/chat?conversation=${conversationId}`,
             conversationId: Number(conversationId),
             senderName: sender?.name,
-          })
+          }),
         );
       } catch (notifErr) {
         console.log("Could not create notification:", notifErr.message);
@@ -782,12 +787,7 @@ router.post(
         await db.query(
           `INSERT INTO notifications (userid, type, title, message, relatedid, relatedtype)
            VALUES ($1, 'message', 'New Message', $2, $3, $4)`,
-          [
-            otherUserId,
-            `You received a photo`,
-            conversationId,
-            "conversation",
-          ],
+          [otherUserId, `You received a photo`, conversationId, "conversation"],
         );
 
         await sendPushToUser(
@@ -798,7 +798,7 @@ router.post(
             url: `/chat?conversation=${conversationId}`,
             conversationId: Number(conversationId),
             senderName: sender?.name,
-          })
+          }),
         );
       } catch (notifErr) {
         console.log("Could not create notification:", notifErr.message);

@@ -2,14 +2,14 @@ import webpush from "web-push";
 import db from "../db.js";
 
 const hasVapidKeys = Boolean(
-  process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY
+  process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY,
 );
 
 if (hasVapidKeys) {
   webpush.setVapidDetails(
     process.env.VAPID_MAILTO || "mailto:support@njimbong.com",
     process.env.VAPID_PUBLIC_KEY,
-    process.env.VAPID_PRIVATE_KEY
+    process.env.VAPID_PRIVATE_KEY,
   );
 }
 
@@ -27,16 +27,20 @@ export const ensurePushSubscriptionsTable = async () => {
       user_agent TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )`
+    )`,
   );
 };
 
 export const upsertPushSubscription = async (
   userId,
   subscription,
-  userAgent
+  userAgent,
 ) => {
-  if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
+  if (
+    !subscription?.endpoint ||
+    !subscription?.keys?.p256dh ||
+    !subscription?.keys?.auth
+  ) {
     throw new Error("Invalid subscription payload");
   }
 
@@ -59,7 +63,7 @@ export const upsertPushSubscription = async (
       subscription.keys.auth,
       subscription.expirationTime || null,
       userAgent || null,
-    ]
+    ],
   );
 };
 
@@ -85,7 +89,7 @@ export const sendPushToUser = async (userId, payload) => {
       `SELECT endpoint, p256dh, auth, expiration_time
        FROM push_subscriptions
        WHERE user_id = $1`,
-      [userId]
+      [userId],
     );
   } catch (error) {
     if (isMissingTableError(error)) return;
@@ -108,9 +112,9 @@ export const sendPushToUser = async (userId, payload) => {
             auth: row.auth,
           },
         },
-        payloadString
-      )
-    )
+        payloadString,
+      ),
+    ),
   );
 
   await Promise.all(
@@ -120,6 +124,6 @@ export const sendPushToUser = async (userId, payload) => {
       if (statusCode === 404 || statusCode === 410) {
         await removePushSubscription(result.rows[idx].endpoint);
       }
-    })
+    }),
   );
 };

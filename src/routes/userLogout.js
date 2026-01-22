@@ -4,15 +4,24 @@ const router = express.Router();
 router.post("/logout", async (req, res) => {
   try {
     const isProd = process.env.NODE_ENV === "production";
-    await res.clearCookie("authToken", {
+    const baseOptions = {
       httpOnly: true,
       secure: isProd,
       sameSite: isProd ? "none" : "lax",
       path: "/",
-      ...(process.env.COOKIE_DOMAIN
-        ? { domain: process.env.COOKIE_DOMAIN }
-        : {}),
-    });
+    };
+
+    const domainOptions = process.env.COOKIE_DOMAIN
+      ? { ...baseOptions, domain: process.env.COOKIE_DOMAIN }
+      : null;
+
+    res.clearCookie("authToken", baseOptions);
+    res.clearCookie("adminAuthToken", baseOptions);
+
+    if (domainOptions) {
+      res.clearCookie("authToken", domainOptions);
+      res.clearCookie("adminAuthToken", domainOptions);
+    }
     res.status(200).json({ message: "Logout successful" });
   } catch (error) {
     console.error("Error during logout:", error);
