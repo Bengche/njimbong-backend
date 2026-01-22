@@ -18,6 +18,10 @@ import dotenv from "dotenv";
 dotenv.config();
 import db from "../db.js";
 import authMiddleware from "../Middleware/authMiddleware.js";
+import {
+  buildNotificationPayload,
+  sendPushToUser,
+} from "../utils/pushNotifications.js";
 
 const router = express.Router();
 
@@ -501,6 +505,17 @@ router.put(
         ]
       );
 
+      await sendPushToUser(
+        listing.userid,
+        buildNotificationPayload({
+          title: "Listing Approved! 🎉",
+          body: `Your listing "${listing.title}" has been approved and is now visible in the marketplace.`,
+          type: "listing_approved",
+          relatedId: id,
+          relatedType: "listing",
+        })
+      );
+
       // Notify all users who have favorited the listing owner
       try {
         const favoritesResult = await db.query(
@@ -528,6 +543,21 @@ router.put(
             )
           );
           await Promise.all(notificationPromises);
+
+          await Promise.all(
+            favoritesResult.rows.map((fav) =>
+              sendPushToUser(
+                fav.user_id,
+                buildNotificationPayload({
+                  title: "New Listing from Favorite Seller ⭐",
+                  body: `${sellerName} just posted a new listing: "${listing.title}"`,
+                  type: "favorite_new_listing",
+                  relatedId: id,
+                  relatedType: "listing",
+                })
+              )
+            )
+          );
           console.log(
             `Notified ${favoritesResult.rows.length} followers of new listing`
           );
@@ -571,6 +601,25 @@ router.put(
 
           if (notifications.length > 0) {
             await Promise.all(notifications);
+
+            await Promise.all(
+              savedSearches.rows
+                .filter((saved) =>
+                  listingMatchesSavedSearch(listing, saved.filters)
+                )
+                .map((saved) =>
+                  sendPushToUser(
+                    saved.user_id,
+                    buildNotificationPayload({
+                      title: "New Listing Alert 🔔",
+                      body: `A new listing matches your saved search "${saved.name}": "${listing.title}"`,
+                      type: "saved_search_match",
+                      relatedId: id,
+                      relatedType: "listing",
+                    })
+                  )
+                )
+            );
           }
         }
       } catch (searchError) {
@@ -662,6 +711,17 @@ router.put(
           id,
           "listing",
         ]
+      );
+
+      await sendPushToUser(
+        listing.userid,
+        buildNotificationPayload({
+          title: "Listing Needs Attention",
+          body: `Your listing "${listing.title}" was not approved. Reason: ${reason}. Please update your listing and resubmit.`,
+          type: "listing_rejected",
+          relatedId: id,
+          relatedType: "listing",
+        })
       );
 
       res.status(200).json({

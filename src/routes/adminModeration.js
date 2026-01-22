@@ -22,6 +22,10 @@ import dotenv from "dotenv";
 dotenv.config();
 import db from "../db.js";
 import authMiddleware from "../Middleware/authMiddleware.js";
+import {
+  buildNotificationPayload,
+  sendPushToUser,
+} from "../utils/pushNotifications.js";
 
 const router = express.Router();
 
@@ -582,6 +586,17 @@ router.post(
         ]
       );
 
+      await sendPushToUser(
+        id,
+        buildNotificationPayload({
+          title: "⚠️ Account Warning",
+          body: `You have received a ${warningType} warning: ${reason}`,
+          type: "warning",
+          relatedId: result.rows[0].id,
+          relatedType: "warning",
+        })
+      );
+
       // Update related report if provided
       if (relatedReportId) {
         await db.query(
@@ -686,6 +701,17 @@ router.post(
         ]
       );
 
+      await sendPushToUser(
+        id,
+        buildNotificationPayload({
+          title: "🚫 Account Suspended",
+          body: `Your account has been suspended. Reason: ${reason}. ${endDateText} You may submit an appeal if you believe this was a mistake.`,
+          type: "suspension",
+          relatedId: result.rows[0].id,
+          relatedType: "suspension",
+        })
+      );
+
       // Update related report if provided
       if (relatedReportId) {
         await db.query(
@@ -759,6 +785,18 @@ router.put(
         ]
       );
 
+      await sendPushToUser(
+        id,
+        buildNotificationPayload({
+          title: "✅ Account Restored",
+          body: `Your account has been restored. ${
+            liftReason || "You can now use all features again."
+          }`,
+          type: "account_restored",
+          relatedType: "account",
+        })
+      );
+
       res
         .status(200)
         .json({ message: "Account suspension lifted successfully" });
@@ -816,6 +854,19 @@ router.delete(
             id,
             "listing",
           ]
+        );
+
+        await sendPushToUser(
+          listing.userid,
+          buildNotificationPayload({
+            title: "Listing Removed",
+            body: `Your listing "${listing.title}" has been removed. Reason: ${
+              reason || "Policy violation"
+            }`,
+            type: "listing_removed",
+            relatedId: id,
+            relatedType: "listing",
+          })
         );
       }
 
@@ -990,6 +1041,17 @@ router.put(
         ]
       );
 
+      await sendPushToUser(
+        appeal.user_id,
+        buildNotificationPayload({
+          title: notificationTitle,
+          body: notificationMessage,
+          type: "appeal_decision",
+          relatedId: id,
+          relatedType: "appeal",
+        })
+      );
+
       res.status(200).json({ message: `Appeal ${decision}` });
     } catch (error) {
       console.error("Error reviewing appeal:", error);
@@ -1160,6 +1222,20 @@ router.post(
       );
 
       await Promise.all(notificationPromises);
+
+      await Promise.all(
+        usersResult.rows.map((user) =>
+          sendPushToUser(
+            user.id,
+            buildNotificationPayload({
+              title: `📢 ${title}`,
+              body: message,
+              type,
+              relatedType: "broadcast",
+            })
+          )
+        )
+      );
 
       // Log the broadcast
       await db

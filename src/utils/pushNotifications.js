@@ -127,3 +127,50 @@ export const sendPushToUser = async (userId, payload) => {
     }),
   );
 };
+
+const defaultUrlForType = (type, relatedId) => {
+  if (
+    [
+      "listing_approved",
+      "listing_rejected",
+      "listing_removed",
+      "favorite_new_listing",
+      "favorite_listing",
+      "saved_search_match",
+      "price_drop",
+    ].includes(type)
+  ) {
+    return relatedId ? `/listing/${relatedId}` : "/market";
+  }
+
+  if (["kyc_approved", "kyc_rejected", "info"].includes(type)) {
+    return "/profile";
+  }
+
+  if (["warning", "suspension", "account_restored"].includes(type)) {
+    return "/profile";
+  }
+
+  return "/dashboard";
+};
+
+export const buildNotificationPayload = ({
+  title,
+  body,
+  type,
+  relatedId,
+  relatedType,
+  url,
+}) => ({
+  title,
+  body,
+  icon: "/icon-192x192.png",
+  badge: "/badge-72x72.svg",
+  tag: type || "notification",
+  data: {
+    url: url || defaultUrlForType(type, relatedId),
+    type,
+    relatedId,
+    relatedType,
+  },
+});

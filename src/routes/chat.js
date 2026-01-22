@@ -30,7 +30,7 @@ const buildMessagePushPayload = ({
   title,
   body,
   icon: "/icon-192x192.png",
-  badge: "/icon-192x192.png",
+  badge: "/badge-72x72.svg",
   tag: conversationId ? `conversation-${conversationId}` : "message",
   data: {
     url: url || "/chat",

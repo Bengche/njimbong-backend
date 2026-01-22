@@ -1,6 +1,10 @@
 import express from "express";
 import db from "../db.js";
 import authMiddleware from "../Middleware/authMiddleware.js";
+import {
+  buildNotificationPayload,
+  sendPushToUser,
+} from "../utils/pushNotifications.js";
 
 const router = express.Router();
 
@@ -217,6 +221,7 @@ router.get("/wishlist", authMiddleware, async (req, res) => {
 
     // Check for price drops and notify
     const priceDropNotifications = [];
+    const priceDropPushes = [];
     for (const listing of listingsWithImages) {
       if (listing.notify_price_drop && listing.price_dropped) {
         priceDropNotifications.push(
@@ -234,6 +239,19 @@ router.get("/wishlist", authMiddleware, async (req, res) => {
           )
         );
 
+        priceDropPushes.push(
+          sendPushToUser(
+            userId,
+            buildNotificationPayload({
+              title: "Price Dropped 🔻",
+              body: `The price for "${listing.title}" dropped from ${listing.last_seen_price} to ${listing.price}.`,
+              type: "price_drop",
+              relatedId: listing.id,
+              relatedType: "listing",
+            })
+          )
+        );
+
         await db.query(
           `UPDATE wishlist_items
            SET last_seen_price = $1, updated_at = NOW()
@@ -245,6 +263,7 @@ router.get("/wishlist", authMiddleware, async (req, res) => {
 
     if (priceDropNotifications.length > 0) {
       await Promise.all(priceDropNotifications);
+      await Promise.all(priceDropPushes);
     }
 
     res.status(200).json({

@@ -2,6 +2,10 @@ import express from "express";
 import db from "../db.js";
 import multer from "multer";
 import cloudinary from "../storage/cloudinary.js";
+import {
+  buildNotificationPayload,
+  sendPushToUser,
+} from "../utils/pushNotifications.js";
 import authMiddleware from "../Middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -169,6 +173,19 @@ router.post(
         ]
       );
 
+      await sendPushToUser(
+        userId,
+        buildNotificationPayload({
+          title: "KYC Verification Submitted",
+          body:
+            "Your KYC verification has been submitted successfully. We will review it within 24-48 hours.",
+          type: "info",
+          relatedId: result.rows[0].id,
+          relatedType: "kyc_verification",
+          url: "/profile",
+        })
+      );
+
       res.status(201).json({
         message: "KYC verification submitted successfully",
         verification: result.rows[0],
@@ -290,6 +307,19 @@ router.put("/kyc/approve/:id", authMiddleware, async (req, res) => {
       ]
     );
 
+    await sendPushToUser(
+      kyc.userid,
+      buildNotificationPayload({
+        title: "KYC Verification Approved! 🎉",
+        body:
+          "Congratulations! Your KYC verification has been approved. You are now a verified user on our platform.",
+        type: "kyc_approved",
+        relatedId: id,
+        relatedType: "kyc_verification",
+        url: "/profile",
+      })
+    );
+
     res.status(200).json({ message: "KYC verification approved successfully" });
   } catch (error) {
     console.error("Error approving KYC:", error);
@@ -342,6 +372,18 @@ router.put("/kyc/reject/:id", authMiddleware, async (req, res) => {
         id,
         "kyc_verification",
       ]
+    );
+
+    await sendPushToUser(
+      kyc.userid,
+      buildNotificationPayload({
+        title: "KYC Verification Rejected",
+        body: `Unfortunately, your KYC verification has been rejected. Reason: ${reason}. You can submit a new verification request with corrected documents.`,
+        type: "kyc_rejected",
+        relatedId: id,
+        relatedType: "kyc_verification",
+        url: "/profile",
+      })
     );
 
     res.status(200).json({ message: "KYC verification rejected successfully" });

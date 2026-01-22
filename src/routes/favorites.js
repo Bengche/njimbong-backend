@@ -8,6 +8,10 @@
 import express from "express";
 import db from "../db.js";
 import authMiddleware from "../Middleware/authMiddleware.js";
+import {
+  buildNotificationPayload,
+  sendPushToUser,
+} from "../utils/pushNotifications.js";
 
 const router = express.Router();
 
@@ -296,6 +300,17 @@ export const notifyFollowers = async (userId, listingId, listingTitle) => {
           listingId,
           "listing",
         ]
+      );
+
+      await sendPushToUser(
+        follower.user_id,
+        buildNotificationPayload({
+          title: "⭐ New Listing from Favorite Seller",
+          body: `${sellerName} just posted a new listing: "${listingTitle}"`,
+          type: "favorite_listing",
+          relatedId: listingId,
+          relatedType: "listing",
+        })
       );
     }
 
