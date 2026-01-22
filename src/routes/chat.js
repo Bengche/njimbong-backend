@@ -14,10 +14,32 @@ import authMiddleware from "../Middleware/authMiddleware.js";
 import { blockIfSuspended } from "../Middleware/suspensionMiddleware.js";
 import cloudinary from "../storage/cloudinary.js";
 import multer from "multer";
+import { sendPushToUser } from "../utils/pushNotifications.js";
 
 const router = express.Router();
 
 const isMissingTableError = (error) => error?.code === "42P01";
+
+const buildMessagePushPayload = ({
+  title,
+  body,
+  url,
+  conversationId,
+  senderName,
+}) => ({
+  title,
+  body,
+  icon: "/icon-192x192.png",
+  badge: "/icon-192x192.png",
+  tag: conversationId ? `conversation-${conversationId}` : "message",
+  data: {
+    url: url || "/chat",
+    type: "message",
+    relatedId: conversationId,
+    relatedType: "conversation",
+    senderName,
+  },
+});
 
 // Configure multer for image uploads
 const storage = multer.memoryStorage();
@@ -308,13 +330,24 @@ router.post(
 
         // Send notification to seller
         await db.query(
-          `INSERT INTO notifications (userid, type, title, message, link)
-           VALUES ($1, 'message', 'New Message', $2, $3)`,
+          `INSERT INTO notifications (userid, type, title, message, relatedid, relatedtype)
+           VALUES ($1, 'message', 'New Message', $2, $3, $4)`,
           [
             sellerId,
             `Someone is interested in your listing`,
-            `/listing/${listingId}`,
+            newConvo.rows[0].id,
+            "conversation",
           ],
+        );
+
+        await sendPushToUser(
+          sellerId,
+          buildMessagePushPayload({
+            title: "New Message",
+            body: "Someone is interested in your listing",
+            url: `/chat?conversation=${newConvo.rows[0].id}`,
+            conversationId: newConvo.rows[0].id,
+          })
         );
 
         const convoDetails = await getConversationDetails(
@@ -363,9 +396,19 @@ router.post(
 
         // Send notification to the other user
         await db.query(
-          `INSERT INTO notifications (userid, type, title, message, link)
-           VALUES ($1, 'message', 'New Message', $2, $3)`,
-          [sellerId, `Someone wants to chat with you`, `/chat`],
+          `INSERT INTO notifications (userid, type, title, message, relatedid, relatedtype)
+           VALUES ($1, 'message', 'New Message', $2, $3, $4)`,
+          [sellerId, `Someone wants to chat with you`, newConvo.rows[0].id, "conversation"],
+        );
+
+        await sendPushToUser(
+          sellerId,
+          buildMessagePushPayload({
+            title: "New Message",
+            body: "Someone wants to chat with you",
+            url: `/chat?conversation=${newConvo.rows[0].id}`,
+            conversationId: newConvo.rows[0].id,
+          })
         );
 
         const convoDetails = await getConversationDetails(
@@ -569,13 +612,25 @@ router.post(
       // Send notification (wrapped in try-catch in case notifications table doesn't exist)
       try {
         await db.query(
-          `INSERT INTO notifications (userid, type, title, message, link)
-           VALUES ($1, 'message', 'New Message', $2, $3)`,
+          `INSERT INTO notifications (userid, type, title, message, relatedid, relatedtype)
+           VALUES ($1, 'message', 'New Message', $2, $3, $4)`,
           [
             otherUserId,
             `You have a new message`,
-            `/chat?conversation=${conversationId}`,
+            conversationId,
+            "conversation",
           ],
+        );
+
+        await sendPushToUser(
+          otherUserId,
+          buildMessagePushPayload({
+            title: "New Message",
+            body: "You have a new message",
+            url: `/chat?conversation=${conversationId}`,
+            conversationId: Number(conversationId),
+            senderName: sender?.name,
+          })
         );
       } catch (notifErr) {
         console.log("Could not create notification:", notifErr.message);
@@ -725,13 +780,25 @@ router.post(
       // Send notification (wrapped in try-catch in case notifications table doesn't exist)
       try {
         await db.query(
-          `INSERT INTO notifications (userid, type, title, message, link)
-           VALUES ($1, 'message', 'New Message', $2, $3)`,
+          `INSERT INTO notifications (userid, type, title, message, relatedid, relatedtype)
+           VALUES ($1, 'message', 'New Message', $2, $3, $4)`,
           [
             otherUserId,
             `You received a photo`,
-            `/chat?conversation=${conversationId}`,
+            conversationId,
+            "conversation",
           ],
+        );
+
+        await sendPushToUser(
+          otherUserId,
+          buildMessagePushPayload({
+            title: "New Message",
+            body: "You received a photo",
+            url: `/chat?conversation=${conversationId}`,
+            conversationId: Number(conversationId),
+            senderName: sender?.name,
+          })
         );
       } catch (notifErr) {
         console.log("Could not create notification:", notifErr.message);

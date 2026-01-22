@@ -69,7 +69,7 @@ router.post("/login", async (req, res) => {
     jwt.sign(
       { id: user.id, email: user.email },
       process.env.JWT_SECRET,
-      { expiresIn: "6h" },
+      { expiresIn: "168h" },
       (err, token) => {
         if (err) {
           console.error("Error generating JWT:", err);
@@ -82,7 +82,7 @@ router.post("/login", async (req, res) => {
         // Set new cookie with fresh token
         res.cookie("authToken", token, {
           ...cookieOptions,
-          maxAge: 6 * 60 * 60 * 1000, // 6 hours
+          maxAge: 168 * 60 * 60 * 1000, // 168 hours
         });
 
         console.log(`User logged in: ID=${user.id}, Email=${user.email}`);

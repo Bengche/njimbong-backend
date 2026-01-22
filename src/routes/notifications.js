@@ -1,10 +1,42 @@
 import express from "express";
 import db from "../db.js";
 import authMiddleware from "../Middleware/authMiddleware.js";
+import {
+  upsertPushSubscription,
+  removePushSubscription,
+} from "../utils/pushNotifications.js";
 
 const router = express.Router();
 
 const isMissingTableError = (error) => error?.code === "42P01";
+
+// Subscribe to push notifications
+router.post("/notifications/subscribe", authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const { subscription } = req.body || {};
+
+  try {
+    await upsertPushSubscription(userId, subscription, req.headers["user-agent"]);
+    res.status(200).json({ message: "Subscribed to push notifications" });
+  } catch (error) {
+    console.error("Error saving push subscription:", error);
+    res.status(500).json({ error: "Failed to save subscription" });
+  }
+});
+
+// Unsubscribe from push notifications
+router.post("/notifications/unsubscribe", authMiddleware, async (req, res) => {
+  const { endpoint, subscription } = req.body || {};
+  const targetEndpoint = endpoint || subscription?.endpoint;
+
+  try {
+    await removePushSubscription(targetEndpoint);
+    res.status(200).json({ message: "Unsubscribed from push notifications" });
+  } catch (error) {
+    console.error("Error removing push subscription:", error);
+    res.status(500).json({ error: "Failed to remove subscription" });
+  }
+});
 
 // Get user notifications
 router.get("/notifications/:userId", authMiddleware, async (req, res) => {
