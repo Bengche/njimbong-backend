@@ -149,7 +149,7 @@ router.get(
       console.error("Error fetching listing stats:", error);
       res.status(500).json({ error: "Failed to fetch listing statistics" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -185,12 +185,12 @@ router.get(
       WHERE l.moderation_status = 'pending'
       ORDER BY l.createdat ASC
       LIMIT $1 OFFSET $2`,
-        [parseInt(limit), offset]
+        [parseInt(limit), offset],
       );
 
       // Get total count for pagination
       const countResult = await db.query(
-        "SELECT COUNT(*) FROM userlistings WHERE moderation_status = 'pending'"
+        "SELECT COUNT(*) FROM userlistings WHERE moderation_status = 'pending'",
       );
 
       // Fetch images for each listing
@@ -200,13 +200,13 @@ router.get(
             `SELECT * FROM imagelistings 
            WHERE listingid = $1 
            ORDER BY is_main DESC`,
-            [listing.id]
+            [listing.id],
           );
           return {
             ...listing,
             images: imagesResult.rows,
           };
-        })
+        }),
       );
 
       res.status(200).json({
@@ -216,7 +216,7 @@ router.get(
           limit: parseInt(limit),
           total: parseInt(countResult.rows[0].count),
           totalPages: Math.ceil(
-            parseInt(countResult.rows[0].count) / parseInt(limit)
+            parseInt(countResult.rows[0].count) / parseInt(limit),
           ),
         },
       });
@@ -224,7 +224,7 @@ router.get(
       console.error("Error fetching pending listings:", error);
       res.status(500).json({ error: "Failed to fetch pending listings" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -340,13 +340,13 @@ router.get(
            WHERE listingid = $1 
            ORDER BY is_main DESC 
            LIMIT 3`,
-            [listing.id]
+            [listing.id],
           );
           return {
             ...listing,
             images: imagesResult.rows,
           };
-        })
+        }),
       );
 
       res.status(200).json({
@@ -356,7 +356,7 @@ router.get(
           limit: parseInt(limit),
           total: parseInt(countResult.rows[0].count),
           totalPages: Math.ceil(
-            parseInt(countResult.rows[0].count) / parseInt(limit)
+            parseInt(countResult.rows[0].count) / parseInt(limit),
           ),
         },
       });
@@ -364,7 +364,7 @@ router.get(
       console.error("Error fetching all listings:", error);
       res.status(500).json({ error: "Failed to fetch listings" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -400,7 +400,7 @@ router.get(
       LEFT JOIN kyc_verifications kyc ON u.id = kyc.userid AND kyc.status = 'approved'
       LEFT JOIN users reviewer ON l.reviewed_by = reviewer.id
       WHERE l.id = $1`,
-        [id]
+        [id],
       );
 
       if (listingResult.rows.length === 0) {
@@ -412,7 +412,7 @@ router.get(
         `SELECT * FROM imagelistings 
        WHERE listingid = $1 
        ORDER BY is_main DESC`,
-        [id]
+        [id],
       );
 
       // Get review history
@@ -424,7 +424,7 @@ router.get(
       LEFT JOIN users u ON lr.admin_id = u.id
       WHERE lr.listing_id = $1
       ORDER BY lr.created_at DESC`,
-        [id]
+        [id],
       );
 
       res.status(200).json({
@@ -436,7 +436,7 @@ router.get(
       console.error("Error fetching listing details:", error);
       res.status(500).json({ error: "Failed to fetch listing details" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -459,7 +459,7 @@ router.put(
       // Check if listing exists and is pending
       const listingCheck = await db.query(
         "SELECT * FROM userlistings WHERE id = $1",
-        [id]
+        [id],
       );
 
       if (listingCheck.rows.length === 0) {
@@ -481,14 +481,14 @@ router.put(
            reviewed_at = NOW()
        WHERE id = $2
        RETURNING *`,
-        [adminId, id]
+        [adminId, id],
       );
 
       // Create audit trail entry
       await db.query(
         `INSERT INTO listing_reviews (listing_id, admin_id, action, notes, created_at)
        VALUES ($1, $2, 'approved', $3, NOW())`,
-        [id, adminId, notes || null]
+        [id, adminId, notes || null],
       );
 
       // Create notification for the listing owner
@@ -502,7 +502,7 @@ router.put(
           "listing_approved",
           id,
           "listing",
-        ]
+        ],
       );
 
       await sendPushToUser(
@@ -513,7 +513,7 @@ router.put(
           type: "listing_approved",
           relatedId: id,
           relatedType: "listing",
-        })
+        }),
       );
 
       // Notify all users who have favorited the listing owner
@@ -523,7 +523,7 @@ router.put(
            FROM user_favorites uf
            JOIN users u ON u.id = uf.favorite_user_id
            WHERE uf.favorite_user_id = $1 AND uf.notify_new_listings = true`,
-          [listing.userid]
+          [listing.userid],
         );
 
         if (favoritesResult.rows.length > 0) {
@@ -539,8 +539,8 @@ router.put(
                 "favorite_new_listing",
                 id,
                 "listing",
-              ]
-            )
+              ],
+            ),
           );
           await Promise.all(notificationPromises);
 
@@ -554,12 +554,12 @@ router.put(
                   type: "favorite_new_listing",
                   relatedId: id,
                   relatedType: "listing",
-                })
-              )
-            )
+                }),
+              ),
+            ),
           );
           console.log(
-            `Notified ${favoritesResult.rows.length} followers of new listing`
+            `Notified ${favoritesResult.rows.length} followers of new listing`,
           );
         }
       } catch (favError) {
@@ -570,19 +570,19 @@ router.put(
       // Notify users with saved searches
       try {
         const tableCheck = await db.query(
-          "SELECT 1 FROM information_schema.tables WHERE table_name = 'saved_searches'"
+          "SELECT 1 FROM information_schema.tables WHERE table_name = 'saved_searches'",
         );
 
         if (tableCheck.rowCount > 0) {
           const savedSearches = await db.query(
             `SELECT id, user_id, name, filters
              FROM saved_searches
-             WHERE notify_new_listings = TRUE`
+             WHERE notify_new_listings = TRUE`,
           );
 
           const notifications = savedSearches.rows
             .filter((saved) =>
-              listingMatchesSavedSearch(listing, saved.filters)
+              listingMatchesSavedSearch(listing, saved.filters),
             )
             .map((saved) =>
               db.query(
@@ -595,8 +595,8 @@ router.put(
                   "saved_search_match",
                   id,
                   "listing",
-                ]
-              )
+                ],
+              ),
             );
 
           if (notifications.length > 0) {
@@ -605,7 +605,7 @@ router.put(
             await Promise.all(
               savedSearches.rows
                 .filter((saved) =>
-                  listingMatchesSavedSearch(listing, saved.filters)
+                  listingMatchesSavedSearch(listing, saved.filters),
                 )
                 .map((saved) =>
                   sendPushToUser(
@@ -616,9 +616,9 @@ router.put(
                       type: "saved_search_match",
                       relatedId: id,
                       relatedType: "listing",
-                    })
-                  )
-                )
+                    }),
+                  ),
+                ),
             );
           }
         }
@@ -634,7 +634,7 @@ router.put(
       console.error("Error approving listing:", error);
       res.status(500).json({ error: "Failed to approve listing" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -671,7 +671,7 @@ router.put(
       // Check if listing exists
       const listingCheck = await db.query(
         "SELECT * FROM userlistings WHERE id = $1",
-        [id]
+        [id],
       );
 
       if (listingCheck.rows.length === 0) {
@@ -689,14 +689,14 @@ router.put(
            reviewed_at = NOW()
        WHERE id = $3
        RETURNING *`,
-        [reason, adminId, id]
+        [reason, adminId, id],
       );
 
       // Create audit trail entry
       await db.query(
         `INSERT INTO listing_reviews (listing_id, admin_id, action, reason, notes, created_at)
        VALUES ($1, $2, 'rejected', $3, $4, NOW())`,
-        [id, adminId, reason, notes || null]
+        [id, adminId, reason, notes || null],
       );
 
       // Create notification for the listing owner
@@ -710,7 +710,7 @@ router.put(
           "listing_rejected",
           id,
           "listing",
-        ]
+        ],
       );
 
       await sendPushToUser(
@@ -721,7 +721,7 @@ router.put(
           type: "listing_rejected",
           relatedId: id,
           relatedType: "listing",
-        })
+        }),
       );
 
       res.status(200).json({
@@ -732,7 +732,7 @@ router.put(
       console.error("Error rejecting listing:", error);
       res.status(500).json({ error: "Failed to reject listing" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -750,7 +750,7 @@ router.put("/admin/listings/:id/resubmit", authMiddleware, async (req, res) => {
     // Check if listing exists and belongs to the user
     const listingCheck = await db.query(
       "SELECT * FROM userlistings WHERE id = $1 AND userid = $2",
-      [id, userId]
+      [id, userId],
     );
 
     if (listingCheck.rows.length === 0) {
@@ -776,7 +776,7 @@ router.put("/admin/listings/:id/resubmit", authMiddleware, async (req, res) => {
            reviewed_at = NULL
        WHERE id = $1
        RETURNING *`,
-      [id]
+      [id],
     );
 
     res.status(200).json({

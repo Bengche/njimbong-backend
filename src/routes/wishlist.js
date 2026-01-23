@@ -19,7 +19,7 @@ const ensureWishlistTables = async () => {
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW(),
       UNIQUE (user_id, listing_id)
-    )`
+    )`,
   );
 };
 
@@ -28,7 +28,7 @@ const getListing = async (listingId) => {
     `SELECT id, title, price, currency, status, moderation_status, userid
      FROM userlistings
      WHERE id = $1`,
-    [listingId]
+    [listingId],
   );
   return result.rows[0] || null;
 };
@@ -42,7 +42,7 @@ router.get("/wishlist/ids", authMiddleware, async (req, res) => {
     const userId = req.user.id;
     const result = await db.query(
       `SELECT listing_id FROM wishlist_items WHERE user_id = $1`,
-      [userId]
+      [userId],
     );
     res.status(200).json({
       listingIds: result.rows.map((row) => row.listing_id),
@@ -64,7 +64,7 @@ router.get("/wishlist/:listingId/check", authMiddleware, async (req, res) => {
 
     const result = await db.query(
       `SELECT id, notify_price_drop FROM wishlist_items WHERE user_id = $1 AND listing_id = $2`,
-      [userId, listingId]
+      [userId, listingId],
     );
 
     res.status(200).json({
@@ -99,7 +99,7 @@ router.post("/wishlist/:listingId", authMiddleware, async (req, res) => {
       `INSERT INTO wishlist_items (user_id, listing_id, last_seen_price)
        VALUES ($1, $2, $3)
        ON CONFLICT (user_id, listing_id) DO NOTHING`,
-      [userId, listingId, listing.price]
+      [userId, listingId, listing.price],
     );
 
     res.status(201).json({ message: "Listing added to wishlist" });
@@ -120,7 +120,7 @@ router.delete("/wishlist/:listingId", authMiddleware, async (req, res) => {
 
     const result = await db.query(
       `DELETE FROM wishlist_items WHERE user_id = $1 AND listing_id = $2 RETURNING id`,
-      [userId, listingId]
+      [userId, listingId],
     );
 
     if (result.rows.length === 0) {
@@ -152,7 +152,7 @@ router.put(
          SET notify_price_drop = $1, updated_at = NOW()
          WHERE user_id = $2 AND listing_id = $3
          RETURNING *`,
-        [Boolean(notify), userId, listingId]
+        [Boolean(notify), userId, listingId],
       );
 
       if (result.rows.length === 0) {
@@ -167,7 +167,7 @@ router.put(
       console.error("Error updating price alert:", error);
       res.status(500).json({ error: "Failed to update price alert" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -195,7 +195,7 @@ router.get("/wishlist", authMiddleware, async (req, res) => {
        WHERE wi.user_id = $1
        ORDER BY wi.created_at DESC
        LIMIT $2 OFFSET $3`,
-      [userId, limit, offset]
+      [userId, limit, offset],
     );
 
     const listingsWithImages = await Promise.all(
@@ -204,7 +204,7 @@ router.get("/wishlist", authMiddleware, async (req, res) => {
           `SELECT * FROM imagelistings
            WHERE listingid = $1
            ORDER BY is_main DESC`,
-          [listing.id]
+          [listing.id],
         );
 
         const priceDropped =
@@ -216,7 +216,7 @@ router.get("/wishlist", authMiddleware, async (req, res) => {
           images: imagesResult.rows,
           price_dropped: priceDropped,
         };
-      })
+      }),
     );
 
     // Check for price drops and notify
@@ -235,8 +235,8 @@ router.get("/wishlist", authMiddleware, async (req, res) => {
               "price_drop",
               listing.id,
               "listing",
-            ]
-          )
+            ],
+          ),
         );
 
         priceDropPushes.push(
@@ -248,15 +248,15 @@ router.get("/wishlist", authMiddleware, async (req, res) => {
               type: "price_drop",
               relatedId: listing.id,
               relatedType: "listing",
-            })
-          )
+            }),
+          ),
         );
 
         await db.query(
           `UPDATE wishlist_items
            SET last_seen_price = $1, updated_at = NOW()
            WHERE user_id = $2 AND listing_id = $3`,
-          [listing.price, userId, listing.id]
+          [listing.price, userId, listing.id],
         );
       }
     }

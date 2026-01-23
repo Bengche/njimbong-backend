@@ -86,12 +86,12 @@ router.get(
 
       // Get pending appeals count
       const appealsCount = await db.query(
-        "SELECT COUNT(*) as count FROM appeals WHERE status = 'pending'"
+        "SELECT COUNT(*) as count FROM appeals WHERE status = 'pending'",
       );
 
       // Get active suspensions count
       const suspensionsCount = await db.query(
-        "SELECT COUNT(*) as count FROM account_suspensions WHERE is_active = true"
+        "SELECT COUNT(*) as count FROM account_suspensions WHERE is_active = true",
       );
 
       res.status(200).json({
@@ -103,7 +103,7 @@ router.get(
       console.error("Error fetching report stats:", error);
       res.status(500).json({ error: "Failed to fetch statistics" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -124,15 +124,15 @@ router.get("/admin/users", authMiddleware, adminCheck, async (req, res) => {
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
     const columnsResult = await db.query(
-      "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'"
+      "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'",
     );
     const columns = new Set(columnsResult.rows.map((row) => row.column_name));
 
     const createdAtSelect = columns.has("created_at")
       ? "u.created_at"
       : columns.has("createdat")
-      ? "u.createdat"
-      : "NOW()";
+        ? "u.createdat"
+        : "NOW()";
     const isSuspendedSelect = columns.has("is_suspended")
       ? "u.is_suspended"
       : "false";
@@ -240,7 +240,7 @@ router.get("/admin/users", authMiddleware, adminCheck, async (req, res) => {
         limit: parseInt(limit),
         total: parseInt(countResult.rows[0].count),
         totalPages: Math.ceil(
-          parseInt(countResult.rows[0].count) / parseInt(limit)
+          parseInt(countResult.rows[0].count) / parseInt(limit),
         ),
       },
     });
@@ -350,12 +350,12 @@ router.get("/admin/reports", authMiddleware, adminCheck, async (req, res) => {
         if (report.reported_listing_id) {
           const images = await db.query(
             `SELECT imageurl FROM imagelistings WHERE listingid = $1 ORDER BY is_main DESC LIMIT 3`,
-            [report.reported_listing_id]
+            [report.reported_listing_id],
           );
           return { ...report, listing_images: images.rows };
         }
         return report;
-      })
+      }),
     );
 
     res.status(200).json({
@@ -365,7 +365,7 @@ router.get("/admin/reports", authMiddleware, adminCheck, async (req, res) => {
         limit: parseInt(limit),
         total: parseInt(countResult.rows[0].count),
         totalPages: Math.ceil(
-          parseInt(countResult.rows[0].count) / parseInt(limit)
+          parseInt(countResult.rows[0].count) / parseInt(limit),
         ),
       },
     });
@@ -412,7 +412,7 @@ router.get(
       LEFT JOIN userlistings l ON r.reported_listing_id = l.id
       LEFT JOIN users reviewer ON r.reviewed_by = reviewer.id
       WHERE r.id = $1`,
-        [id]
+        [id],
       );
 
       if (result.rows.length === 0) {
@@ -425,7 +425,7 @@ router.get(
       if (report.reported_listing_id) {
         const images = await db.query(
           `SELECT * FROM imagelistings WHERE listingid = $1 ORDER BY is_main DESC`,
-          [report.reported_listing_id]
+          [report.reported_listing_id],
         );
         report.listing_images = images.rows;
       }
@@ -439,7 +439,7 @@ router.get(
          LEFT JOIN report_reasons rr ON r.reason_id = rr.id
          WHERE r.reported_user_id = $1 AND r.id != $2
          ORDER BY r.created_at DESC LIMIT 10`,
-          [report.reported_user_id, id]
+          [report.reported_user_id, id],
         );
       } else {
         previousReports = await db.query(
@@ -448,7 +448,7 @@ router.get(
          LEFT JOIN report_reasons rr ON r.reason_id = rr.id
          WHERE r.reported_listing_id = $1 AND r.id != $2
          ORDER BY r.created_at DESC LIMIT 10`,
-          [report.reported_listing_id, id]
+          [report.reported_listing_id, id],
         );
       }
       report.previous_reports = previousReports.rows;
@@ -456,7 +456,7 @@ router.get(
       // Get user's moderation history
       const warnings = await db.query(
         `SELECT * FROM violation_warnings WHERE user_id = $1 ORDER BY created_at DESC`,
-        [report.reported_user_id]
+        [report.reported_user_id],
       );
       report.user_warnings = warnings.rows;
 
@@ -465,7 +465,7 @@ router.get(
       console.error("Error fetching report:", error);
       res.status(500).json({ error: "Failed to fetch report details" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -492,7 +492,7 @@ router.put(
            reviewed_by = $4, reviewed_at = NOW(), updated_at = NOW()
        WHERE id = $5
        RETURNING *`,
-        [status, adminNotes || null, actionTaken || null, adminId, id]
+        [status, adminNotes || null, actionTaken || null, adminId, id],
       );
 
       if (result.rows.length === 0) {
@@ -507,7 +507,7 @@ router.put(
       console.error("Error updating report:", error);
       res.status(500).json({ error: "Failed to update report" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -543,7 +543,7 @@ router.post(
       // Check user exists
       const userCheck = await db.query(
         "SELECT id, name, email FROM users WHERE id = $1",
-        [id]
+        [id],
       );
       if (userCheck.rows.length === 0) {
         return res.status(404).json({ error: "User not found" });
@@ -563,13 +563,13 @@ router.post(
           relatedListingId || null,
           adminId,
           expiresAt || null,
-        ]
+        ],
       );
 
       // Increment user's warning count
       await db.query(
         "UPDATE users SET warning_count = COALESCE(warning_count, 0) + 1 WHERE id = $1",
-        [id]
+        [id],
       );
 
       // Create notification for user
@@ -583,7 +583,7 @@ router.post(
           "warning",
           result.rows[0].id,
           "warning",
-        ]
+        ],
       );
 
       await sendPushToUser(
@@ -594,7 +594,7 @@ router.post(
           type: "warning",
           relatedId: result.rows[0].id,
           relatedType: "warning",
-        })
+        }),
       );
 
       // Update related report if provided
@@ -602,7 +602,7 @@ router.post(
         await db.query(
           `UPDATE reports SET status = 'resolved', action_taken = 'warning', 
          reviewed_by = $1, reviewed_at = NOW() WHERE id = $2`,
-          [adminId, relatedReportId]
+          [adminId, relatedReportId],
         );
       }
 
@@ -614,7 +614,7 @@ router.post(
       console.error("Error issuing warning:", error);
       res.status(500).json({ error: "Failed to issue warning" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -633,7 +633,7 @@ router.post(
       // Prevent suspending admins
       const userCheck = await db.query(
         "SELECT id, name, email, role FROM users WHERE id = $1",
-        [id]
+        [id],
       );
       if (userCheck.rows.length === 0) {
         return res.status(404).json({ error: "User not found" });
@@ -672,19 +672,19 @@ router.post(
           relatedReportId || null,
           adminId,
           endsAt || null,
-        ]
+        ],
       );
 
       // Update user's suspension status
       await db.query(
         `UPDATE users SET is_suspended = true, suspension_reason = $1 WHERE id = $2`,
-        [reason, id]
+        [reason, id],
       );
 
       // Create notification for user
       const endDateText = endsAt
         ? `Your account will be restored on ${new Date(
-            endsAt
+            endsAt,
           ).toLocaleDateString()}.`
         : "This is a permanent suspension.";
 
@@ -698,7 +698,7 @@ router.post(
           "suspension",
           result.rows[0].id,
           "suspension",
-        ]
+        ],
       );
 
       await sendPushToUser(
@@ -709,7 +709,7 @@ router.post(
           type: "suspension",
           relatedId: result.rows[0].id,
           relatedType: "suspension",
-        })
+        }),
       );
 
       // Update related report if provided
@@ -717,7 +717,7 @@ router.post(
         await db.query(
           `UPDATE reports SET status = 'resolved', action_taken = 'account_suspended', 
          reviewed_by = $1, reviewed_at = NOW() WHERE id = $2`,
-          [adminId, relatedReportId]
+          [adminId, relatedReportId],
         );
       }
 
@@ -729,7 +729,7 @@ router.post(
       console.error("Error suspending account:", error);
       res.status(500).json({ error: "Failed to suspend account" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -748,7 +748,7 @@ router.put(
       // Check if user is actually suspended
       const userCheck = await db.query(
         "SELECT is_suspended FROM users WHERE id = $1",
-        [id]
+        [id],
       );
       if (userCheck.rows.length === 0) {
         return res.status(404).json({ error: "User not found" });
@@ -762,13 +762,13 @@ router.put(
         `UPDATE account_suspensions 
        SET is_active = false, lifted_by = $1, lifted_at = NOW(), lift_reason = $2
        WHERE user_id = $3 AND is_active = true`,
-        [adminId, liftReason || "Suspension lifted by admin", id]
+        [adminId, liftReason || "Suspension lifted by admin", id],
       );
 
       // Update user status
       await db.query(
         `UPDATE users SET is_suspended = false, suspension_reason = NULL WHERE id = $1`,
-        [id]
+        [id],
       );
 
       // Notify user
@@ -782,7 +782,7 @@ router.put(
             liftReason || "You can now use all features again."
           }`,
           "account_restored",
-        ]
+        ],
       );
 
       await sendPushToUser(
@@ -794,7 +794,7 @@ router.put(
           }`,
           type: "account_restored",
           relatedType: "account",
-        })
+        }),
       );
 
       res
@@ -804,7 +804,7 @@ router.put(
       console.error("Error unsuspending account:", error);
       res.status(500).json({ error: "Failed to lift suspension" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -823,7 +823,7 @@ router.delete(
       // Get listing info before deletion
       const listingCheck = await db.query(
         "SELECT id, title, userid FROM userlistings WHERE id = $1",
-        [id]
+        [id],
       );
       if (listingCheck.rows.length === 0) {
         return res.status(404).json({ error: "Listing not found" });
@@ -836,7 +836,7 @@ router.delete(
         `UPDATE userlistings 
        SET moderation_status = 'removed', rejection_reason = $1, reviewed_by = $2, reviewed_at = NOW()
        WHERE id = $3`,
-        [reason || "Removed for policy violation", adminId, id]
+        [reason || "Removed for policy violation", adminId, id],
       );
 
       // Notify user if requested
@@ -853,7 +853,7 @@ router.delete(
             "listing_removed",
             id,
             "listing",
-          ]
+          ],
         );
 
         await sendPushToUser(
@@ -866,7 +866,7 @@ router.delete(
             type: "listing_removed",
             relatedId: id,
             relatedType: "listing",
-          })
+          }),
         );
       }
 
@@ -875,7 +875,7 @@ router.delete(
         await db.query(
           `UPDATE reports SET status = 'resolved', action_taken = 'listing_removed', 
          reviewed_by = $1, reviewed_at = NOW() WHERE id = $2`,
-          [adminId, relatedReportId]
+          [adminId, relatedReportId],
         );
       }
 
@@ -884,7 +884,7 @@ router.delete(
       console.error("Error removing listing:", error);
       res.status(500).json({ error: "Failed to remove listing" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -944,7 +944,7 @@ router.get("/admin/appeals", authMiddleware, adminCheck, async (req, res) => {
         limit: parseInt(limit),
         total: parseInt(countResult.rows[0].count),
         totalPages: Math.ceil(
-          parseInt(countResult.rows[0].count) / parseInt(limit)
+          parseInt(countResult.rows[0].count) / parseInt(limit),
         ),
       },
     });
@@ -974,7 +974,7 @@ router.put(
       // Get appeal details
       const appealCheck = await db.query(
         "SELECT * FROM appeals WHERE id = $1",
-        [id]
+        [id],
       );
       if (appealCheck.rows.length === 0) {
         return res.status(404).json({ error: "Appeal not found" });
@@ -987,7 +987,7 @@ router.put(
         `UPDATE appeals 
        SET status = $1, admin_notes = $2, reviewed_by = $3, reviewed_at = NOW(), updated_at = NOW()
        WHERE id = $4`,
-        [decision, adminNotes || null, adminId, id]
+        [decision, adminNotes || null, adminId, id],
       );
 
       // If approved, take action based on appeal type
@@ -998,11 +998,11 @@ router.put(
             `UPDATE account_suspensions 
            SET is_active = false, lifted_by = $1, lifted_at = NOW(), lift_reason = 'Appeal approved'
            WHERE id = $2`,
-            [adminId, appeal.suspension_id]
+            [adminId, appeal.suspension_id],
           );
           await db.query(
             `UPDATE users SET is_suspended = false, suspension_reason = NULL WHERE id = $1`,
-            [appeal.user_id]
+            [appeal.user_id],
           );
         } else if (
           appeal.appeal_type === "listing_removal" &&
@@ -1011,7 +1011,7 @@ router.put(
           // Restore listing
           await db.query(
             `UPDATE userlistings SET moderation_status = 'approved', rejection_reason = NULL WHERE id = $1`,
-            [appeal.related_listing_id]
+            [appeal.related_listing_id],
           );
         }
       }
@@ -1038,7 +1038,7 @@ router.put(
           "appeal_decision",
           id,
           "appeal",
-        ]
+        ],
       );
 
       await sendPushToUser(
@@ -1049,7 +1049,7 @@ router.put(
           type: "appeal_decision",
           relatedId: id,
           relatedType: "appeal",
-        })
+        }),
       );
 
       res.status(200).json({ message: `Appeal ${decision}` });
@@ -1057,7 +1057,7 @@ router.put(
       console.error("Error reviewing appeal:", error);
       res.status(500).json({ error: "Failed to review appeal" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -1073,10 +1073,10 @@ router.get(
     try {
       // Get user info (defensive against missing columns)
       const userColumnsResult = await db.query(
-        `SELECT column_name FROM information_schema.columns WHERE table_name = 'users'`
+        `SELECT column_name FROM information_schema.columns WHERE table_name = 'users'`,
       );
       const userColumns = new Set(
-        userColumnsResult.rows.map((row) => row.column_name)
+        userColumnsResult.rows.map((row) => row.column_name),
       );
       const userSelect = [
         "id",
@@ -1087,8 +1087,8 @@ router.get(
         userColumns.has("created_at")
           ? "created_at"
           : userColumns.has("createdat")
-          ? "createdat as created_at"
-          : "NOW() as created_at",
+            ? "createdat as created_at"
+            : "NOW() as created_at",
         userColumns.has("is_suspended")
           ? "is_suspended"
           : "false as is_suspended",
@@ -1103,7 +1103,7 @@ router.get(
 
       const user = await db.query(
         `SELECT ${userSelect.join(", ")} FROM users WHERE id = $1`,
-        [id]
+        [id],
       );
 
       if (user.rows.length === 0) {
@@ -1118,7 +1118,7 @@ router.get(
        LEFT JOIN users reporter ON r.reporter_id = reporter.id
        WHERE r.reported_user_id = $1
        ORDER BY r.created_at DESC`,
-        [id]
+        [id],
       );
 
       // Get warnings
@@ -1128,7 +1128,7 @@ router.get(
        LEFT JOIN users admin ON w.issued_by = admin.id
        WHERE w.user_id = $1
        ORDER BY w.created_at DESC`,
-        [id]
+        [id],
       );
 
       // Get suspensions
@@ -1139,7 +1139,7 @@ router.get(
        LEFT JOIN users lifter ON s.lifted_by = lifter.id
        WHERE s.user_id = $1
        ORDER BY s.created_at DESC`,
-        [id]
+        [id],
       );
 
       // Get appeals
@@ -1149,7 +1149,7 @@ router.get(
        LEFT JOIN users reviewer ON a.reviewed_by = reviewer.id
        WHERE a.user_id = $1
        ORDER BY a.created_at DESC`,
-        [id]
+        [id],
       );
 
       res.status(200).json({
@@ -1163,7 +1163,7 @@ router.get(
       console.error("Error fetching moderation history:", error);
       res.status(500).json({ error: "Failed to fetch moderation history" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -1203,7 +1203,7 @@ router.post(
 
       // Get all active users (not suspended)
       const usersResult = await db.query(
-        "SELECT id FROM users WHERE is_suspended = false OR is_suspended IS NULL"
+        "SELECT id FROM users WHERE is_suspended = false OR is_suspended IS NULL",
       );
 
       if (usersResult.rows.length === 0) {
@@ -1217,8 +1217,8 @@ router.post(
         db.query(
           `INSERT INTO notifications (userid, title, message, type, relatedtype, createdat)
            VALUES ($1, $2, $3, $4, $5, NOW())`,
-          [user.id, `📢 ${title}`, message, type, "broadcast"]
-        )
+          [user.id, `📢 ${title}`, message, type, "broadcast"],
+        ),
       );
 
       await Promise.all(notificationPromises);
@@ -1232,9 +1232,9 @@ router.post(
               body: message,
               type,
               relatedType: "broadcast",
-            })
-          )
-        )
+            }),
+          ),
+        ),
       );
 
       // Log the broadcast
@@ -1242,7 +1242,7 @@ router.post(
         .query(
           `INSERT INTO admin_broadcasts (admin_id, title, message, type, priority, recipients_count, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-          [adminId, title, message, type, priority, usersResult.rows.length]
+          [adminId, title, message, type, priority, usersResult.rows.length],
         )
         .catch(() => {
           // Table might not exist yet, that's okay
@@ -1257,7 +1257,7 @@ router.post(
       console.error("Error sending broadcast:", error);
       res.status(500).json({ error: "Failed to send broadcast" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -1277,11 +1277,11 @@ router.get(
          LEFT JOIN users a ON b.admin_id = a.id
          ORDER BY b.created_at DESC
          LIMIT $1 OFFSET $2`,
-        [limit, offset]
+        [limit, offset],
       );
 
       const countResult = await db.query(
-        "SELECT COUNT(*) FROM admin_broadcasts"
+        "SELECT COUNT(*) FROM admin_broadcasts",
       );
 
       res.status(200).json({
@@ -1293,7 +1293,7 @@ router.get(
       // If table doesn't exist, return empty
       res.status(200).json({ broadcasts: [], total: 0 });
     }
-  }
+  },
 );
 
 export default router;

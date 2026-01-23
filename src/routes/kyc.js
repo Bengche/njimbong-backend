@@ -13,7 +13,7 @@ const router = express.Router();
 const updateUserKycStatus = async (userId, status) => {
   try {
     const columnCheck = await db.query(
-      "SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'kyc_status'"
+      "SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'kyc_status'",
     );
     if (columnCheck.rowCount === 0) return;
     await db.query("UPDATE users SET kyc_status = $1 WHERE id = $2", [
@@ -78,7 +78,7 @@ router.post(
       // Check if user already has a pending or approved KYC
       const existingKyc = await db.query(
         "SELECT * FROM kyc_verifications WHERE userid = $1 AND status IN ('pending', 'approved') ORDER BY createdat DESC LIMIT 1",
-        [userId]
+        [userId],
       );
 
       if (existingKyc.rows.length > 0) {
@@ -102,7 +102,7 @@ router.post(
           (error, result) => {
             if (error) reject(error);
             else resolve(result);
-          }
+          },
         );
         uploadStream.end(req.files.documentFront[0].buffer);
       });
@@ -119,7 +119,7 @@ router.post(
             (error, result) => {
               if (error) reject(error);
               else resolve(result);
-            }
+            },
           );
           uploadStream.end(req.files.documentBack[0].buffer);
         });
@@ -136,7 +136,7 @@ router.post(
           (error, result) => {
             if (error) reject(error);
             else resolve(result);
-          }
+          },
         );
         uploadStream.end(req.files.selfie[0].buffer);
       });
@@ -153,7 +153,7 @@ router.post(
           documentFrontUpload.secure_url,
           documentBackUrl,
           selfieUpload.secure_url,
-        ]
+        ],
       );
 
       await updateUserKycStatus(userId, "pending");
@@ -170,20 +170,19 @@ router.post(
           "info",
           result.rows[0].id,
           "kyc_verification",
-        ]
+        ],
       );
 
       await sendPushToUser(
         userId,
         buildNotificationPayload({
           title: "KYC Verification Submitted",
-          body:
-            "Your KYC verification has been submitted successfully. We will review it within 24-48 hours.",
+          body: "Your KYC verification has been submitted successfully. We will review it within 24-48 hours.",
           type: "info",
           relatedId: result.rows[0].id,
           relatedType: "kyc_verification",
           url: "/profile",
-        })
+        }),
       );
 
       res.status(201).json({
@@ -194,7 +193,7 @@ router.post(
       console.error("Error submitting KYC:", error);
       res.status(500).json({ error: "Failed to submit KYC verification" });
     }
-  }
+  },
 );
 
 // Get user's KYC status
@@ -207,7 +206,7 @@ router.get("/kyc/status/:userId", authMiddleware, async (req, res) => {
        WHERE userid = $1 
        ORDER BY createdat DESC 
        LIMIT 1`,
-      [userId]
+      [userId],
     );
 
     if (result.rows.length === 0) {
@@ -229,7 +228,7 @@ router.get("/kyc/pending", authMiddleware, async (req, res) => {
        FROM kyc_verifications k
        LEFT JOIN users u ON k.userid = u.id
        WHERE k.status = 'pending'
-       ORDER BY k.createdat ASC`
+       ORDER BY k.createdat ASC`,
     );
 
     res.status(200).json(result.rows);
@@ -248,7 +247,7 @@ router.get("/kyc/all", authMiddleware, async (req, res) => {
       `SELECT k.*, u.name, u.email, u.username 
        FROM kyc_verifications k
        LEFT JOIN users u ON k.userid = u.id
-       ORDER BY k.createdat DESC`
+       ORDER BY k.createdat DESC`,
     );
 
     res.status(200).json(result.rows);
@@ -268,7 +267,7 @@ router.put("/kyc/approve/:id", authMiddleware, async (req, res) => {
     // Get KYC verification details
     const kycResult = await db.query(
       "SELECT * FROM kyc_verifications WHERE id = $1",
-      [id]
+      [id],
     );
 
     if (kycResult.rows.length === 0) {
@@ -282,7 +281,7 @@ router.put("/kyc/approve/:id", authMiddleware, async (req, res) => {
       `UPDATE kyc_verifications 
        SET status = 'approved', reviewedby = $1, reviewedat = NOW(), updatedat = NOW() 
        WHERE id = $2`,
-      [adminId, id]
+      [adminId, id],
     );
 
     // Update user's verified status
@@ -304,20 +303,19 @@ router.put("/kyc/approve/:id", authMiddleware, async (req, res) => {
         "kyc_approved",
         id,
         "kyc_verification",
-      ]
+      ],
     );
 
     await sendPushToUser(
       kyc.userid,
       buildNotificationPayload({
         title: "KYC Verification Approved! 🎉",
-        body:
-          "Congratulations! Your KYC verification has been approved. You are now a verified user on our platform.",
+        body: "Congratulations! Your KYC verification has been approved. You are now a verified user on our platform.",
         type: "kyc_approved",
         relatedId: id,
         relatedType: "kyc_verification",
         url: "/profile",
-      })
+      }),
     );
 
     res.status(200).json({ message: "KYC verification approved successfully" });
@@ -340,7 +338,7 @@ router.put("/kyc/reject/:id", authMiddleware, async (req, res) => {
     // Get KYC verification details
     const kycResult = await db.query(
       "SELECT * FROM kyc_verifications WHERE id = $1",
-      [id]
+      [id],
     );
 
     if (kycResult.rows.length === 0) {
@@ -354,7 +352,7 @@ router.put("/kyc/reject/:id", authMiddleware, async (req, res) => {
       `UPDATE kyc_verifications 
        SET status = 'rejected', rejectionreason = $1, reviewedby = $2, reviewedat = NOW(), updatedat = NOW() 
        WHERE id = $3`,
-      [reason, adminId, id]
+      [reason, adminId, id],
     );
 
     await updateUserKycStatus(kyc.userid, "rejected");
@@ -371,7 +369,7 @@ router.put("/kyc/reject/:id", authMiddleware, async (req, res) => {
         "kyc_rejected",
         id,
         "kyc_verification",
-      ]
+      ],
     );
 
     await sendPushToUser(
@@ -383,7 +381,7 @@ router.put("/kyc/reject/:id", authMiddleware, async (req, res) => {
         relatedId: id,
         relatedType: "kyc_verification",
         url: "/profile",
-      })
+      }),
     );
 
     res.status(200).json({ message: "KYC verification rejected successfully" });

@@ -25,7 +25,7 @@ router.get("/favorites/:userId/check", authMiddleware, async (req, res) => {
   try {
     const result = await db.query(
       "SELECT id FROM user_favorites WHERE user_id = $1 AND favorite_user_id = $2",
-      [currentUserId, userId]
+      [currentUserId, userId],
     );
 
     res.status(200).json({
@@ -53,7 +53,7 @@ router.post("/favorites/:userId", authMiddleware, async (req, res) => {
     // Check if user exists
     const userCheck = await db.query(
       "SELECT id, name FROM users WHERE id = $1",
-      [userId]
+      [userId],
     );
     if (userCheck.rows.length === 0) {
       return res.status(404).json({ error: "User not found" });
@@ -62,7 +62,7 @@ router.post("/favorites/:userId", authMiddleware, async (req, res) => {
     // Check if already favorited
     const existingFavorite = await db.query(
       "SELECT id FROM user_favorites WHERE user_id = $1 AND favorite_user_id = $2",
-      [currentUserId, userId]
+      [currentUserId, userId],
     );
 
     if (existingFavorite.rows.length > 0) {
@@ -74,7 +74,7 @@ router.post("/favorites/:userId", authMiddleware, async (req, res) => {
     // Add to favorites
     await db.query(
       "INSERT INTO user_favorites (user_id, favorite_user_id, created_at) VALUES ($1, $2, NOW())",
-      [currentUserId, userId]
+      [currentUserId, userId],
     );
 
     res.status(201).json({
@@ -97,7 +97,7 @@ router.delete("/favorites/:userId", authMiddleware, async (req, res) => {
   try {
     const result = await db.query(
       "DELETE FROM user_favorites WHERE user_id = $1 AND favorite_user_id = $2 RETURNING id",
-      [currentUserId, userId]
+      [currentUserId, userId],
     );
 
     if (result.rows.length === 0) {
@@ -122,7 +122,7 @@ router.get("/favorites", authMiddleware, async (req, res) => {
 
   try {
     const columnsResult = await db.query(
-      "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'"
+      "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'",
     );
     const columns = new Set(columnsResult.rows.map((row) => row.column_name));
     const suspensionSelect = columns.has("is_suspended")
@@ -148,13 +148,13 @@ router.get("/favorites", authMiddleware, async (req, res) => {
        WHERE uf.user_id = $1
        ORDER BY uf.created_at DESC
        LIMIT $2 OFFSET $3`,
-      [currentUserId, limit, offset]
+      [currentUserId, limit, offset],
     );
 
     // Get total count
     const countResult = await db.query(
       "SELECT COUNT(*) FROM user_favorites WHERE user_id = $1",
-      [currentUserId]
+      [currentUserId],
     );
 
     res.status(200).json({
@@ -176,7 +176,7 @@ router.get("/favorites/listings", authMiddleware, async (req, res) => {
 
   try {
     const columnsResult = await db.query(
-      "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'"
+      "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'",
     );
     const columns = new Set(columnsResult.rows.map((row) => row.column_name));
     const suspensionSelect = columns.has("is_suspended")
@@ -205,7 +205,7 @@ router.get("/favorites/listings", authMiddleware, async (req, res) => {
          AND l.status = 'Available'
        ORDER BY l.createdat DESC
        LIMIT $2 OFFSET $3`,
-      [currentUserId, limit, offset]
+      [currentUserId, limit, offset],
     );
 
     // Fetch images for each listing
@@ -215,13 +215,13 @@ router.get("/favorites/listings", authMiddleware, async (req, res) => {
           `SELECT * FROM imagelistings 
            WHERE listingid = $1 
            ORDER BY is_main DESC`,
-          [listing.id]
+          [listing.id],
         );
         return {
           ...listing,
           images: imagesResult.rows,
         };
-      })
+      }),
     );
 
     // Get total count
@@ -229,7 +229,7 @@ router.get("/favorites/listings", authMiddleware, async (req, res) => {
       `SELECT COUNT(*) FROM userlistings l
        JOIN user_favorites uf ON l.userid = uf.favorite_user_id
        WHERE uf.user_id = $1 AND l.moderation_status = 'approved' AND l.status = 'Available'`,
-      [currentUserId]
+      [currentUserId],
     );
 
     res.status(200).json({
@@ -253,7 +253,7 @@ router.get("/favorites/count", authMiddleware, async (req, res) => {
   try {
     const result = await db.query(
       "SELECT COUNT(*) FROM user_favorites WHERE user_id = $1",
-      [currentUserId]
+      [currentUserId],
     );
 
     res.status(200).json({
@@ -277,13 +277,13 @@ export const notifyFollowers = async (userId, listingId, listingTitle) => {
        FROM user_favorites uf
        JOIN users u ON uf.user_id = u.id
        WHERE uf.favorite_user_id = $1`,
-      [userId]
+      [userId],
     );
 
     // Get the seller's name
     const sellerResult = await db.query(
       "SELECT name FROM users WHERE id = $1",
-      [userId]
+      [userId],
     );
     const sellerName = sellerResult.rows[0]?.name || "A seller you follow";
 
@@ -299,7 +299,7 @@ export const notifyFollowers = async (userId, listingId, listingTitle) => {
           "favorite_listing",
           listingId,
           "listing",
-        ]
+        ],
       );
 
       await sendPushToUser(
@@ -310,7 +310,7 @@ export const notifyFollowers = async (userId, listingId, listingTitle) => {
           type: "favorite_listing",
           relatedId: listingId,
           relatedType: "listing",
-        })
+        }),
       );
     }
 
