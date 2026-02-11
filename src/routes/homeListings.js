@@ -4,6 +4,7 @@ import db from "../db.js";
 
 // Route to get home listings
 router.get("/listings", (req, res) => {
+  // We use lowercase comparison to be extra safe against 'Approved' vs 'approved'
   const query = `
     SELECT l.*, i.imageurl 
     FROM userlistings l
@@ -11,7 +12,8 @@ router.get("/listings", (req, res) => {
       SELECT DISTINCT ON (listingid) listingid, imageurl 
       FROM imagelistings
     ) i ON l.id = i.listingid
-    WHERE l.moderation_status = 'approved'
+    WHERE LOWER(l.moderation_status) = 'approved' 
+      AND LOWER(l.moderation_status) != 'removed'
     ORDER BY random() 
     LIMIT 10;
   `;
