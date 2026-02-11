@@ -26,6 +26,7 @@ import analytics from "./routes/analytics.js";
 import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
 import logout from "./routes/userLogout.js";
+import homeListings from "./routes/homeListings.js";
 import db from "./db.js";
 dotenv.config();
 
@@ -48,7 +49,7 @@ if (process.env.NODE_ENV === "production") {
 app.use(
   helmet({
     crossOriginResourcePolicy: false,
-  })
+  }),
 );
 
 const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:3000")
@@ -74,7 +75,7 @@ app.use(
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
-  })
+  }),
 );
 
 const apiLimiter = rateLimit({
@@ -151,6 +152,7 @@ app.use("/api", favorites);
 app.use("/api", wishlist);
 app.use("/api/analytics", analytics);
 app.use("/auth", logout);
+app.use("/home", homeListings);
 
 app.get("/", (req, res) => {
   res.status(200).json({ status: "ok" });
@@ -163,16 +165,16 @@ app.get("/health", (req, res) => {
 const ensureKycTriggers = async () => {
   try {
     const result = await db.query(
-      "SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'kyc_status'"
+      "SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'kyc_status'",
     );
 
     if (result.rowCount === 0) {
       await db.query("DROP TRIGGER IF EXISTS trust_score_kyc_trigger ON users");
       await db.query(
-        "DROP TRIGGER IF EXISTS trigger_update_review_eligibility ON users"
+        "DROP TRIGGER IF EXISTS trigger_update_review_eligibility ON users",
       );
       console.warn(
-        "KYC triggers disabled: users.kyc_status column is missing."
+        "KYC triggers disabled: users.kyc_status column is missing.",
       );
     }
   } catch (error) {
