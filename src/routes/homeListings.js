@@ -5,7 +5,7 @@ import db from "../db.js";
 // Route to get home listings
 router.get("/listings", (req, res) => {
   db.query(
-    "SELECT * FROM listings ORDER BY random() LIMIT 10;",
+    "SELECT * FROM userlistings ORDER BY random() LIMIT 10;",
     (err, result) => {
       if (err) {
         console.error("Error fetching home listings:", err);
