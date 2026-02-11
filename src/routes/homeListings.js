@@ -4,8 +4,6 @@ import db from "../db.js";
 
 // Route to get home listings
 router.get("/listings", (req, res) => {
-  // 1. Changed table name to 'imagelistings'
-  // 2. Ensuring we use 'listingid' and 'imageurl' as you specified
   const query = `
     SELECT l.*, i.imageurl 
     FROM userlistings l
@@ -13,6 +11,7 @@ router.get("/listings", (req, res) => {
       SELECT DISTINCT ON (listingid) listingid, imageurl 
       FROM imagelistings
     ) i ON l.id = i.listingid
+    WHERE l.moderation_status = 'approved'
     ORDER BY random() 
     LIMIT 10;
   `;
