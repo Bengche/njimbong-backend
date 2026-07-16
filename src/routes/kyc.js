@@ -7,6 +7,11 @@ import {
   sendPushToUser,
 } from "../utils/pushNotifications.js";
 import authMiddleware from "../Middleware/authMiddleware.js";
+import {
+  sendKycSubmittedAdmin,
+  sendKycApproved,
+  sendKycRejected,
+} from "../utils/email.js";
 
 const router = express.Router();
 
@@ -185,6 +190,12 @@ router.post(
         }),
       );
 
+      // Email admin about new KYC submission
+      const userForEmail = await db.query("SELECT id, name, email FROM users WHERE id = $1", [userId]);
+      if (userForEmail.rows.length > 0) {
+        sendKycSubmittedAdmin(userForEmail.rows[0], result.rows[0].id);
+      }
+
       res.status(201).json({
         message: "KYC verification submitted successfully",
         verification: result.rows[0],
@@ -318,6 +329,12 @@ router.put("/kyc/approve/:id", authMiddleware, async (req, res) => {
       }),
     );
 
+    // Email user about KYC approval
+    const approvedUserResult = await db.query("SELECT id, name, email FROM users WHERE id = $1", [kyc.userid]);
+    if (approvedUserResult.rows.length > 0) {
+      sendKycApproved(approvedUserResult.rows[0]);
+    }
+
     res.status(200).json({ message: "KYC verification approved successfully" });
   } catch (error) {
     console.error("Error approving KYC:", error);
@@ -383,6 +400,12 @@ router.put("/kyc/reject/:id", authMiddleware, async (req, res) => {
         url: "/profile",
       }),
     );
+
+    // Email user about KYC rejection
+    const rejectedUserResult = await db.query("SELECT id, name, email FROM users WHERE id = $1", [kyc.userid]);
+    if (rejectedUserResult.rows.length > 0) {
+      sendKycRejected(rejectedUserResult.rows[0], reason);
+    }
 
     res.status(200).json({ message: "KYC verification rejected successfully" });
   } catch (error) {

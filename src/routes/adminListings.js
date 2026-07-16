@@ -22,6 +22,14 @@ import {
   buildNotificationPayload,
   sendPushToUser,
 } from "../utils/pushNotifications.js";
+import {
+  sendListingApproved,
+  sendListingRejected,
+} from "../utils/email.js";
+import {
+  sendListingApproved,
+  sendListingRejected,
+} from "../utils/email.js";
 
 const router = express.Router();
 
@@ -516,6 +524,12 @@ router.put(
         }),
       );
 
+      // Email the listing owner
+      const ownerApprove = await db.query("SELECT id, name, email FROM users WHERE id = $1", [listing.userid]);
+      if (ownerApprove.rows.length > 0) {
+        sendListingApproved(ownerApprove.rows[0], listing);
+      }
+
       // Notify all users who have favorited the listing owner
       try {
         const favoritesResult = await db.query(
@@ -723,6 +737,12 @@ router.put(
           relatedType: "listing",
         }),
       );
+
+      // Email the listing owner
+      const ownerReject = await db.query("SELECT id, name, email FROM users WHERE id = $1", [listing.userid]);
+      if (ownerReject.rows.length > 0) {
+        sendListingRejected(ownerReject.rows[0], listing, reason);
+      }
 
       res.status(200).json({
         message: "Listing rejected",

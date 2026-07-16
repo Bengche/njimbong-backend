@@ -26,6 +26,11 @@ import {
   buildNotificationPayload,
   sendPushToUser,
 } from "../utils/pushNotifications.js";
+import {
+  sendAccountSuspended,
+  sendAccountReinstated,
+  sendAdminWarning,
+} from "../utils/email.js";
 
 const router = express.Router();
 
@@ -597,6 +602,9 @@ router.post(
         }),
       );
 
+      // Email the warned user
+      sendAdminWarning({ id, name: userCheck?.rows[0]?.name, email: userCheck?.rows[0]?.email }, reason, warningType);
+
       // Update related report if provided
       if (relatedReportId) {
         await db.query(
@@ -712,6 +720,9 @@ router.post(
         }),
       );
 
+      // Email the suspended user
+      sendAccountSuspended(userCheck.rows[0], reason, endsAt || null);
+
       // Update related report if provided
       if (relatedReportId) {
         await db.query(
@@ -747,7 +758,7 @@ router.put(
     try {
       // Check if user is actually suspended
       const userCheck = await db.query(
-        "SELECT is_suspended FROM users WHERE id = $1",
+        "SELECT id, name, email, is_suspended FROM users WHERE id = $1",
         [id],
       );
       if (userCheck.rows.length === 0) {
@@ -796,6 +807,9 @@ router.put(
           relatedType: "account",
         }),
       );
+
+      // Email the reinstated user
+      sendAccountReinstated(userCheck.rows[0]);
 
       res
         .status(200)

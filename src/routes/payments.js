@@ -42,23 +42,29 @@ router.post(
         .json({ error: "listing_id and phone_number are required." });
     }
 
-    // Cameroonian MoMo: 237 + 9 digits, starting with 2376 (MTN) or 2372 (Orange)
-    if (!/^237[62]\d{8}$/.test(phone_number)) {
-      return res
-        .status(400)
-        .json({
-          error:
-            "Invalid phone number. Must be a Cameroonian MoMo number (e.g. 237670000000 or 237690000000).",
-        });
+    // Normalise phone_number: strip non-digits, ensure 237 prefix
+    const rawDigits = phone_number.replace(/\D/g, "");
+    const normalisedPhone = rawDigits.startsWith("237")
+      ? rawDigits
+      : "237" + rawDigits;
+
+    if (!/^237[62]\d{8}$/.test(normalisedPhone)) {
+      return res.status(400).json({
+        error:
+          "Invalid phone number. Must be a Cameroonian MTN or Orange MoMo number.",
+      });
     }
 
     try {
       // Fetch the listing and both users in one query
       const listingResult = await db.query(
         `SELECT l.id, l.title, l.description, l.price, l.currency, l.userid AS seller_id,
-              b.email AS buyer_email
+              l.phone AS seller_phone,
+              b.email AS buyer_email,
+              s.email AS seller_email
        FROM userlistings l
        JOIN users b ON b.id = $2
+       JOIN users s ON s.id = l.userid
        WHERE l.id = $1
          AND l.status = 'active'
          AND l.moderation_status = 'approved'`,
@@ -80,21 +86,16 @@ router.post(
       }
 
       if (listing.currency !== "XAF") {
-        return res
-          .status(400)
-          .json({
-            error:
-              "Fonlok escrow is only supported for XAF-priced listings at this time.",
-          });
+        return res.status(400).json({
+          error:
+            "Fonlok escrow is only supported for XAF-priced listings at this time.",
+        });
       }
 
       if (Number(listing.price) < 500) {
-        return res
-          .status(400)
-          .json({
-            error:
-              "Listing price is below the minimum escrow amount (500 XAF).",
-          });
+        return res.status(400).json({
+          error: "Listing price is below the minimum escrow amount (500 XAF).",
+        });
       }
 
       // Prevent duplicate in-flight orders for the same listing by this buyer
@@ -107,11 +108,9 @@ router.post(
       );
 
       if (existingOrder.rows.length > 0) {
-        return res
-          .status(409)
-          .json({
-            error: "You already have an active order for this listing.",
-          });
+        return res.status(409).json({
+          error: "You already have an active order for this listing.",
+        });
       }
 
       const orderId = `${listing_id}-${buyer_id}-${Date.now()}`;
@@ -125,6 +124,8 @@ router.post(
           title: listing.title,
           amount: Math.round(Number(listing.price)),
           buyerEmail: listing.buyer_email,
+          sellerEmail: listing.seller_email,
+          sellerPhone: listing.seller_phone,
           description: `Marketplace purchase: ${listing.title}`,
           orderId,
           expiresAt,
@@ -157,7 +158,7 @@ router.post(
         payment = await withRetry(() =>
           initiateFonlokPayment({
             invoiceId: invoice.id,
-            phoneNumber: phone_number,
+            phoneNumber: normalisedPhone,
             buyerEmail: listing.buyer_email,
           }),
         );
@@ -168,12 +169,10 @@ router.post(
         );
         const fonlokError = paymentErr.response?.data?.error;
         if (fonlokError === "no_payout_number") {
-          return res
-            .status(403)
-            .json({
-              error:
-                "The seller has not set up their Fonlok payout account. Contact them directly.",
-            });
+          return res.status(403).json({
+            error:
+              "The seller has not set up their Fonlok payout account. Contact them directly.",
+          });
         }
         const msg =
           paymentErr.response?.data?.message ||
@@ -205,27 +204,20 @@ router.post(
       const httpStatus = err.response?.status;
 
       if (fonlokError === "amount_too_low") {
-        return res
-          .status(400)
-          .json({
-            error:
-              "Listing price is below the minimum payment amount (500 XAF).",
-          });
+        return res.status(400).json({
+          error: "Listing price is below the minimum payment amount (500 XAF).",
+        });
       }
       if (fonlokError === "duplicate_reference") {
-        return res
-          .status(409)
-          .json({
-            error: "An order for this listing is already being processed.",
-          });
+        return res.status(409).json({
+          error: "An order for this listing is already being processed.",
+        });
       }
       if (httpStatus === 429) {
-        return res
-          .status(429)
-          .json({
-            error:
-              "Payment service is temporarily rate-limited. Please try again in a minute.",
-          });
+        return res.status(429).json({
+          error:
+            "Payment service is temporarily rate-limited. Please try again in a minute.",
+        });
       }
       return res
         .status(500)

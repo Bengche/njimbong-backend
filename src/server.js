@@ -29,6 +29,7 @@ import logout from "./routes/userLogout.js";
 import homeListings from "./routes/homeListings.js";
 import payments from "./routes/payments.js";
 import fonlokWebhook from "./routes/fonlokWebhook.js";
+import emailVerification from "./routes/emailVerification.js";
 import db from "./db.js";
 dotenv.config();
 
@@ -140,6 +141,7 @@ app.use("/admin", authLimiter);
 app.use("/admin", AdminLogin);
 app.use("/auth", userLogin);
 app.use("/auth", registerUSER);
+app.use("/auth", emailVerification);
 app.use("/register", registerUSER);
 app.use("/api", listings);
 app.use("/api", categories);

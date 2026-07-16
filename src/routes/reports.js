@@ -22,6 +22,7 @@ import {
   blockIfSuspended,
   getUserSuspensionStatus,
 } from "../Middleware/suspensionMiddleware.js";
+import { sendReportSubmittedAdmin } from "../utils/email.js";
 
 const router = express.Router();
 
@@ -145,6 +146,9 @@ router.post(
         console.warn("Warning: failed to update report_count", countError);
       }
 
+      // Notify admin about new listing report
+      sendReportSubmittedAdmin(result.rows[0]);
+
       res.status(201).json({
         message:
           "Report submitted successfully. Our team will review it shortly.",
@@ -241,6 +245,9 @@ router.post(
       } catch (countError) {
         console.warn("Warning: failed to update report_count", countError);
       }
+
+      // Notify admin about new user report
+      sendReportSubmittedAdmin(result.rows[0]);
 
       res.status(201).json({
         message:

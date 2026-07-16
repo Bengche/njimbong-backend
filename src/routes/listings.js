@@ -4,6 +4,7 @@ import cloudinary from "../storage/cloudinary.js";
 import multer from "multer";
 import authMiddleware from "../Middleware/authMiddleware.js";
 import { blockIfSuspended } from "../Middleware/suspensionMiddleware.js";
+import { sendListingSubmittedAdmin } from "../utils/email.js";
 
 const router = express.Router();
 
@@ -170,6 +171,12 @@ router.post(
             console.error("Error uploading image to Cloudinary:", uploadError);
           }
         }
+      }
+
+      // Notify admin about new listing
+      const posterResult = await db.query("SELECT id, name, email FROM users WHERE id = $1", [req.user.id]);
+      if (posterResult.rows.length > 0) {
+        sendListingSubmittedAdmin(posterResult.rows[0], listingResult.rows[0]);
       }
 
       res.status(201).json({

@@ -81,6 +81,37 @@ const migrations = [
         ON public.orders (fonlok_reference);
     `,
   },
+  {
+    name: "002_create_email_verifications_table",
+    sql: `
+      CREATE TABLE IF NOT EXISTS public.email_verifications (
+        id         SERIAL PRIMARY KEY,
+        user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token      VARCHAR(128) NOT NULL UNIQUE,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        used_at    TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS email_verifications_token_idx
+        ON public.email_verifications (token);
+
+      CREATE INDEX IF NOT EXISTS email_verifications_user_id_idx
+        ON public.email_verifications (user_id);
+
+      -- Add email_verified column to users if it doesn't exist
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'users' AND column_name = 'email_verified'
+        ) THEN
+          ALTER TABLE public.users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT FALSE;
+        END IF;
+      END
+      $$;
+    `,
+  },
 ];
 
 // ---------------------------------------------------------------------------
