@@ -12,7 +12,8 @@ import sgMail from "@sendgrid/mail";
 
 const FROM = "Njimbong <support@njimbong.com>";
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "support@njimbong.com";
-const APP_URL = process.env.FRONTEND_URL?.split(",")[0].trim() || "https://njimbong.com";
+const APP_URL =
+  process.env.FRONTEND_URL?.split(",")[0].trim() || "https://njimbong.com";
 
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -92,7 +93,10 @@ async function send({ to, subject, html }) {
   try {
     await sgMail.send({ from: FROM, to, subject, html });
   } catch (err) {
-    console.error(`[Email] Failed to send "${subject}" to ${to}:`, err?.response?.body || err.message);
+    console.error(
+      `[Email] Failed to send "${subject}" to ${to}:`,
+      err?.response?.body || err.message,
+    );
   }
 }
 
@@ -100,7 +104,9 @@ async function send({ to, subject, html }) {
 
 export async function sendEmailVerification(user, token) {
   const link = `${APP_URL}/verify-email?token=${token}`;
-  const html = wrap("Verify your email — Njimbong", `
+  const html = wrap(
+    "Verify your email — Njimbong",
+    `
     <p class="greeting">Verify your email address</p>
     <p class="text">Thank you for joining Njimbong. Before you can start buying and selling, please verify your email address by clicking the button below.</p>
     <p style="text-align:center;margin:28px 0;">
@@ -111,14 +117,21 @@ export async function sendEmailVerification(user, token) {
     <p class="meta">If the button does not work, copy and paste this link into your browser:<br/>
       <a href="${link}">${link}</a>
     </p>
-  `);
-  await send({ to: user.email, subject: "Verify your email address — Njimbong", html });
+  `,
+  );
+  await send({
+    to: user.email,
+    subject: "Verify your email address — Njimbong",
+    html,
+  });
 }
 
 // ─── 2. Welcome email (sent after verification) ───────────────────────────────
 
 export async function sendWelcomeEmail(user) {
-  const html = wrap("Welcome to Njimbong", `
+  const html = wrap(
+    "Welcome to Njimbong",
+    `
     <p class="greeting">Welcome to Njimbong, ${user.name}.</p>
     <p class="text">Your email has been verified and your account is now active. You can now browse listings, buy securely through escrow, and sell your items to buyers across Cameroon.</p>
     <div class="info-box">
@@ -134,15 +147,22 @@ export async function sendWelcomeEmail(user) {
     </p>
     <hr class="divider"/>
     <p class="meta">If you have questions, contact us at <a href="mailto:support@njimbong.com">support@njimbong.com</a>.</p>
-  `);
-  await send({ to: user.email, subject: "Welcome to Njimbong — your account is ready", html });
+  `,
+  );
+  await send({
+    to: user.email,
+    subject: "Welcome to Njimbong — your account is ready",
+    html,
+  });
 }
 
 // ─── 3. KYC submitted — notify admin ─────────────────────────────────────────
 
 export async function sendKycSubmittedAdmin(user, kycId) {
   const reviewLink = `${APP_URL}/admin_dashboard/kyc`;
-  const html = wrap("New KYC submission — Njimbong Admin", `
+  const html = wrap(
+    "New KYC submission — Njimbong Admin",
+    `
     <p class="greeting">New KYC verification submitted</p>
     <p class="text">A user has submitted a KYC verification request and is awaiting review.</p>
     <div class="info-box">
@@ -155,14 +175,21 @@ export async function sendKycSubmittedAdmin(user, kycId) {
     <p style="text-align:center;margin:28px 0;">
       <a href="${reviewLink}" class="btn">Review in Admin Dashboard</a>
     </p>
-  `);
-  await send({ to: ADMIN_EMAIL, subject: `KYC submission from ${user.name} — action required`, html });
+  `,
+  );
+  await send({
+    to: ADMIN_EMAIL,
+    subject: `KYC submission from ${user.name} — action required`,
+    html,
+  });
 }
 
 // ─── 4. KYC approved — notify user ───────────────────────────────────────────
 
 export async function sendKycApproved(user) {
-  const html = wrap("KYC Approved — Njimbong", `
+  const html = wrap(
+    "KYC Approved — Njimbong",
+    `
     <p class="greeting">Your identity has been verified</p>
     <p class="text">Your KYC verification has been reviewed and <strong>approved</strong>. You are now a verified member of Njimbong.</p>
     <div class="info-box">
@@ -178,14 +205,21 @@ export async function sendKycApproved(user) {
     </p>
     <hr class="divider"/>
     <p class="meta">Thank you for verifying your identity. If you have questions, contact <a href="mailto:support@njimbong.com">support@njimbong.com</a>.</p>
-  `);
-  await send({ to: user.email, subject: "Your KYC verification has been approved — Njimbong", html });
+  `,
+  );
+  await send({
+    to: user.email,
+    subject: "Your KYC verification has been approved — Njimbong",
+    html,
+  });
 }
 
 // ─── 5. KYC rejected — notify user ───────────────────────────────────────────
 
 export async function sendKycRejected(user, reason) {
-  const html = wrap("KYC Not Approved — Njimbong", `
+  const html = wrap(
+    "KYC Not Approved — Njimbong",
+    `
     <p class="greeting">KYC verification not approved</p>
     <p class="text">Your KYC verification has been reviewed. Unfortunately we were unable to approve it at this time.</p>
     <div class="info-box-red">
@@ -198,15 +232,22 @@ export async function sendKycRejected(user, reason) {
     </p>
     <hr class="divider"/>
     <p class="meta">If you believe this decision is an error, contact <a href="mailto:support@njimbong.com">support@njimbong.com</a>.</p>
-  `);
-  await send({ to: user.email, subject: "Your KYC verification could not be approved — Njimbong", html });
+  `,
+  );
+  await send({
+    to: user.email,
+    subject: "Your KYC verification could not be approved — Njimbong",
+    html,
+  });
 }
 
 // ─── 6. New listing submitted — notify admin ──────────────────────────────────
 
 export async function sendListingSubmittedAdmin(user, listing) {
   const reviewLink = `${APP_URL}/admin_dashboard/listings`;
-  const html = wrap("New listing pending review — Njimbong Admin", `
+  const html = wrap(
+    "New listing pending review — Njimbong Admin",
+    `
     <p class="greeting">New listing submitted for review</p>
     <p class="text">A seller has submitted a new listing and it is awaiting moderation approval.</p>
     <div class="info-box">
@@ -220,15 +261,22 @@ export async function sendListingSubmittedAdmin(user, listing) {
     <p style="text-align:center;margin:28px 0;">
       <a href="${reviewLink}" class="btn">Review in Admin Dashboard</a>
     </p>
-  `);
-  await send({ to: ADMIN_EMAIL, subject: `New listing pending review: "${listing.title}" — action required`, html });
+  `,
+  );
+  await send({
+    to: ADMIN_EMAIL,
+    subject: `New listing pending review: "${listing.title}" — action required`,
+    html,
+  });
 }
 
 // ─── 7. Listing approved — notify user ───────────────────────────────────────
 
 export async function sendListingApproved(user, listing) {
   const listingLink = `${APP_URL}/listing/${listing.id}`;
-  const html = wrap("Listing Approved — Njimbong", `
+  const html = wrap(
+    "Listing Approved — Njimbong",
+    `
     <p class="greeting">Your listing has been approved</p>
     <p class="text">Your listing has been reviewed by our team and is now <strong>live on the marketplace</strong>. Buyers can now find and contact you.</p>
     <div class="info-box">
@@ -241,14 +289,21 @@ export async function sendListingApproved(user, listing) {
     </p>
     <hr class="divider"/>
     <p class="meta">Share your listing with potential buyers to increase visibility. For support, contact <a href="mailto:support@njimbong.com">support@njimbong.com</a>.</p>
-  `);
-  await send({ to: user.email, subject: `Your listing "${listing.title}" is now live — Njimbong`, html });
+  `,
+  );
+  await send({
+    to: user.email,
+    subject: `Your listing "${listing.title}" is now live — Njimbong`,
+    html,
+  });
 }
 
 // ─── 8. Listing rejected — notify user ───────────────────────────────────────
 
 export async function sendListingRejected(user, listing, reason) {
-  const html = wrap("Listing Not Approved — Njimbong", `
+  const html = wrap(
+    "Listing Not Approved — Njimbong",
+    `
     <p class="greeting">Your listing could not be approved</p>
     <p class="text">Your listing has been reviewed and was not approved for publication on the marketplace.</p>
     <div class="info-box-red">
@@ -261,8 +316,13 @@ export async function sendListingRejected(user, listing, reason) {
     </p>
     <hr class="divider"/>
     <p class="meta">If you believe this decision is an error, contact <a href="mailto:support@njimbong.com">support@njimbong.com</a>.</p>
-  `);
-  await send({ to: user.email, subject: `Your listing "${listing.title}" was not approved — Njimbong`, html });
+  `,
+  );
+  await send({
+    to: user.email,
+    subject: `Your listing "${listing.title}" was not approved — Njimbong`,
+    html,
+  });
 }
 
 // ─── 9. Account suspended — notify user ──────────────────────────────────────
@@ -271,7 +331,9 @@ export async function sendAccountSuspended(user, reason, endsAt) {
   const duration = endsAt
     ? `This suspension ends on <strong>${new Date(endsAt).toDateString()}</strong>.`
     : "This suspension is permanent pending further review.";
-  const html = wrap("Account Suspended — Njimbong", `
+  const html = wrap(
+    "Account Suspended — Njimbong",
+    `
     <p class="greeting">Your account has been suspended</p>
     <p class="text">Your Njimbong account has been suspended following a review of your activity on the platform.</p>
     <div class="info-box-red">
@@ -285,14 +347,21 @@ export async function sendAccountSuspended(user, reason, endsAt) {
     </p>
     <hr class="divider"/>
     <p class="meta">Njimbong reserves the right to suspend accounts that violate our <a href="${APP_URL}/terms-privacy">Terms of Service</a>.</p>
-  `);
-  await send({ to: user.email, subject: "Your Njimbong account has been suspended", html });
+  `,
+  );
+  await send({
+    to: user.email,
+    subject: "Your Njimbong account has been suspended",
+    html,
+  });
 }
 
 // ─── 10. Account reinstated — notify user ────────────────────────────────────
 
 export async function sendAccountReinstated(user) {
-  const html = wrap("Account Reinstated — Njimbong", `
+  const html = wrap(
+    "Account Reinstated — Njimbong",
+    `
     <p class="greeting">Your account has been reinstated</p>
     <p class="text">Following a review, your Njimbong account suspension has been lifted. You can now log in and use the platform again.</p>
     <p style="text-align:center;margin:28px 0;">
@@ -300,14 +369,21 @@ export async function sendAccountReinstated(user) {
     </p>
     <hr class="divider"/>
     <p class="meta">Please review our <a href="${APP_URL}/terms-privacy">Terms of Service</a> to ensure continued compliance. For questions, contact <a href="mailto:support@njimbong.com">support@njimbong.com</a>.</p>
-  `);
-  await send({ to: user.email, subject: "Your Njimbong account has been reinstated", html });
+  `,
+  );
+  await send({
+    to: user.email,
+    subject: "Your Njimbong account has been reinstated",
+    html,
+  });
 }
 
 // ─── 11. Admin warning issued — notify user ───────────────────────────────────
 
 export async function sendAdminWarning(user, reason, severity) {
-  const html = wrap("Account Warning — Njimbong", `
+  const html = wrap(
+    "Account Warning — Njimbong",
+    `
     <p class="greeting">A warning has been issued on your account</p>
     <p class="text">Our moderation team has issued a formal warning on your Njimbong account.</p>
     <div class="info-box-amber">
@@ -318,14 +394,21 @@ export async function sendAdminWarning(user, reason, severity) {
     <p class="text">Repeated violations may result in account suspension. Please review our community guidelines to avoid further action.</p>
     <hr class="divider"/>
     <p class="meta">Questions? Contact <a href="mailto:support@njimbong.com">support@njimbong.com</a>.</p>
-  `);
-  await send({ to: user.email, subject: "A warning has been issued on your Njimbong account", html });
+  `,
+  );
+  await send({
+    to: user.email,
+    subject: "A warning has been issued on your Njimbong account",
+    html,
+  });
 }
 
 // ─── 12. Payment confirmed (escrow funded) — notify buyer + seller ────────────
 
 export async function sendPaymentConfirmedBuyer(user, listing, orderId) {
-  const html = wrap("Payment Secured in Escrow — Njimbong", `
+  const html = wrap(
+    "Payment Secured in Escrow — Njimbong",
+    `
     <p class="greeting">Your payment is secured</p>
     <p class="text">Your payment for the item below has been received and is held securely in escrow by Fonlok. The seller has been notified and will prepare your item for delivery.</p>
     <div class="info-box">
@@ -339,12 +422,19 @@ export async function sendPaymentConfirmedBuyer(user, listing, orderId) {
     </p>
     <hr class="divider"/>
     <p class="meta">For disputes or issues, contact <a href="mailto:support@njimbong.com">support@njimbong.com</a>.</p>
-  `);
-  await send({ to: user.email, subject: `Payment secured for "${listing.title}" — Njimbong`, html });
+  `,
+  );
+  await send({
+    to: user.email,
+    subject: `Payment secured for "${listing.title}" — Njimbong`,
+    html,
+  });
 }
 
 export async function sendPaymentConfirmedSeller(user, listing, orderId) {
-  const html = wrap("New Secured Order — Njimbong", `
+  const html = wrap(
+    "New Secured Order — Njimbong",
+    `
     <p class="greeting">A buyer has paid for your listing</p>
     <p class="text">A buyer's payment for your listing below has been received and is held in escrow by Fonlok. Please prepare the item for delivery.</p>
     <div class="info-box">
@@ -355,15 +445,22 @@ export async function sendPaymentConfirmedSeller(user, listing, orderId) {
     <p class="text"><strong>Important:</strong> Funds will be released to your Mobile Money number once the buyer confirms receipt on <a href="https://fonlok.com" style="color:#16a34a;">fonlok.com</a>. Ship promptly to ensure a smooth transaction.</p>
     <hr class="divider"/>
     <p class="meta">For questions about the payout, contact <a href="mailto:support@njimbong.com">support@njimbong.com</a>.</p>
-  `);
-  await send({ to: user.email, subject: `New secured order for "${listing.title}" — Njimbong`, html });
+  `,
+  );
+  await send({
+    to: user.email,
+    subject: `New secured order for "${listing.title}" — Njimbong`,
+    html,
+  });
 }
 
 // ─── 13. New report submitted — notify admin ──────────────────────────────────
 
 export async function sendReportSubmittedAdmin(report) {
   const reviewLink = `${APP_URL}/admin_dashboard/moderation`;
-  const html = wrap("New Report Submitted — Njimbong Admin", `
+  const html = wrap(
+    "New Report Submitted — Njimbong Admin",
+    `
     <p class="greeting">A new report has been submitted</p>
     <div class="info-box-amber">
       <div class="info-row"><span class="info-label">Report type</span><span class="info-value">${report.report_type}</span></div>
@@ -374,6 +471,11 @@ export async function sendReportSubmittedAdmin(report) {
     <p style="text-align:center;margin:28px 0;">
       <a href="${reviewLink}" class="btn">Review in Admin Dashboard</a>
     </p>
-  `);
-  await send({ to: ADMIN_EMAIL, subject: `New ${report.report_type} report submitted — action required`, html });
+  `,
+  );
+  await send({
+    to: ADMIN_EMAIL,
+    subject: `New ${report.report_type} report submitted — action required`,
+    html,
+  });
 }

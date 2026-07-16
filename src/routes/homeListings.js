@@ -34,7 +34,7 @@ router.get("/listings/browse", async (req, res) => {
   try {
     const [countRes, listingsRes] = await Promise.all([
       db.query(
-        `SELECT COUNT(*) FROM userlistings WHERE LOWER(moderation_status) = 'approved'`
+        `SELECT COUNT(*) FROM userlistings WHERE LOWER(moderation_status) = 'approved'`,
       ),
       db.query(
         `SELECT l.*, i.imageurl 
@@ -46,7 +46,7 @@ router.get("/listings/browse", async (req, res) => {
          WHERE LOWER(l.moderation_status) = 'approved'
          ORDER BY l.createdat DESC
          LIMIT $1 OFFSET $2`,
-        [limit, offset]
+        [limit, offset],
       ),
     ]);
 

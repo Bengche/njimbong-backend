@@ -42,7 +42,7 @@ router.post("/signup", upload.single("profileImage"), async (req, res) => {
           (error, result) => {
             if (error) reject(error);
             else resolve(result);
-          }
+          },
         );
         uploadStream.end(req.file.buffer);
       });
@@ -54,7 +54,7 @@ router.post("/signup", upload.single("profileImage"), async (req, res) => {
 
     const userResult = await db.query(
       "INSERT INTO users (name, username, email, phone, country, passwordHash, profilePictureUrl, createdat) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING id, name, email",
-      [name, username, email, phone, country, passwordHash, profilePictureUrl]
+      [name, username, email, phone, country, passwordHash, profilePictureUrl],
     );
     const newUser = userResult.rows[0];
 
@@ -63,13 +63,18 @@ router.post("/signup", upload.single("profileImage"), async (req, res) => {
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
     await db.query(
       "INSERT INTO email_verifications (user_id, token, expires_at) VALUES ($1, $2, $3)",
-      [newUser.id, token, expiresAt]
+      [newUser.id, token, expiresAt],
     );
 
     // Fire-and-forget — never block response on email
     sendEmailVerification(newUser, token);
 
-    res.status(201).json({ message: "Registration successful. Please check your email to verify your account." });
+    res
+      .status(201)
+      .json({
+        message:
+          "Registration successful. Please check your email to verify your account.",
+      });
   } catch (error) {
     console.error("Error adding user to database:", error.message);
     res.status(500).json({ message: "Database error" });

@@ -10,7 +10,7 @@ const router = express.Router();
 
 const getUserSuspensionSelect = async () => {
   const result = await db.query(
-    "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'"
+    "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'",
   );
   const columns = new Set(result.rows.map((row) => row.column_name));
   return columns.has("is_suspended")
@@ -131,7 +131,7 @@ router.post(
           tagsArray,
           status || "Available",
           "pending", // All new listings require admin approval
-        ]
+        ],
       );
 
       const listingId = listingResult.rows[0].id;
@@ -152,7 +152,7 @@ router.post(
                 (error, result) => {
                   if (error) reject(error);
                   else resolve(result);
-                }
+                },
               );
               uploadStream.end(file.buffer);
             });
@@ -163,7 +163,7 @@ router.post(
              (listingid, imageurl, is_main, created_at, updated_at) 
              VALUES ($1, $2, $3, NOW(), NOW()) 
              RETURNING *`,
-              [listingId, result.secure_url, i === 0] // First image is main
+              [listingId, result.secure_url, i === 0], // First image is main
             );
 
             uploadedImages.push(imageResult.rows[0]);
@@ -174,7 +174,10 @@ router.post(
       }
 
       // Notify admin about new listing
-      const posterResult = await db.query("SELECT id, name, email FROM users WHERE id = $1", [req.user.id]);
+      const posterResult = await db.query(
+        "SELECT id, name, email FROM users WHERE id = $1",
+        [req.user.id],
+      );
       if (posterResult.rows.length > 0) {
         sendListingSubmittedAdmin(posterResult.rows[0], listingResult.rows[0]);
       }
@@ -195,7 +198,7 @@ router.post(
         .status(500)
         .json({ error: "Failed to create listing", details: error.message });
     }
-  }
+  },
 );
 
 // Get current user's listings (includes all moderation statuses)
@@ -209,7 +212,7 @@ router.get("/my-listings", authMiddleware, async (req, res) => {
        LEFT JOIN categories c ON l.categoryid = c.id 
        WHERE l.userid = $1
        ORDER BY l.createdat DESC`,
-      [userId]
+      [userId],
     );
 
     // Fetch images for each listing
@@ -219,13 +222,13 @@ router.get("/my-listings", authMiddleware, async (req, res) => {
           `SELECT * FROM imagelistings 
            WHERE listingid = $1 
            ORDER BY is_main DESC`,
-          [listing.id]
+          [listing.id],
         );
         return {
           ...listing,
           images: imagesResult.rows,
         };
-      })
+      }),
     );
 
     res.status(200).json(listingsWithImages);
@@ -336,13 +339,13 @@ router.get("/listings", authMiddleware, async (req, res) => {
           `SELECT * FROM imagelistings 
            WHERE listingid = $1 
            ORDER BY is_main DESC`,
-          [listing.id]
+          [listing.id],
         );
         return {
           ...listing,
           images: imagesResult.rows,
         };
-      })
+      }),
     );
 
     res.status(200).json(listingsWithImages);
@@ -372,7 +375,7 @@ router.get("/listings/:id", authMiddleware, async (req, res) => {
        LEFT JOIN users u ON l.userid = u.id
        LEFT JOIN kyc_verifications kyc ON u.id = kyc.userid AND kyc.status = 'approved'
        WHERE l.id = $1`,
-      [id]
+      [id],
     );
 
     if (listingResult.rows.length === 0) {
@@ -386,7 +389,7 @@ router.get("/listings/:id", authMiddleware, async (req, res) => {
       `SELECT * FROM imagelistings 
        WHERE listingid = $1 
        ORDER BY is_main DESC`,
-      [id]
+      [id],
     );
 
     res.status(200).json({
@@ -407,7 +410,7 @@ router.get("/listings/related/:id", authMiddleware, async (req, res) => {
     // First, get the current listing's category and tags
     const currentListing = await db.query(
       `SELECT categoryid, tags FROM userlistings WHERE id = $1`,
-      [id]
+      [id],
     );
 
     if (currentListing.rows.length === 0) {
@@ -451,13 +454,13 @@ router.get("/listings/related/:id", authMiddleware, async (req, res) => {
           `SELECT * FROM imagelistings 
            WHERE listingid = $1 
            ORDER BY is_main DESC`,
-          [listing.id]
+          [listing.id],
         );
         return {
           ...listing,
           images: imagesResult.rows,
         };
-      })
+      }),
     );
 
     res.status(200).json(relatedWithImages);
@@ -476,7 +479,7 @@ router.put("/listings/:id/mark-sold", authMiddleware, async (req, res) => {
     // Check if listing exists and belongs to the user
     const listingCheck = await db.query(
       "SELECT id, userid, status, title FROM userlistings WHERE id = $1",
-      [id]
+      [id],
     );
 
     if (listingCheck.rows.length === 0) {
@@ -503,7 +506,7 @@ router.put("/listings/:id/mark-sold", authMiddleware, async (req, res) => {
        SET status = 'Sold', updatedat = NOW() 
        WHERE id = $1 
        RETURNING *`,
-      [id]
+      [id],
     );
 
     res.status(200).json({
@@ -525,7 +528,7 @@ router.put("/listings/:id/mark-available", authMiddleware, async (req, res) => {
     // Check if listing exists and belongs to the user
     const listingCheck = await db.query(
       "SELECT id, userid, status, title FROM userlistings WHERE id = $1",
-      [id]
+      [id],
     );
 
     if (listingCheck.rows.length === 0) {
@@ -550,7 +553,7 @@ router.put("/listings/:id/mark-available", authMiddleware, async (req, res) => {
        SET status = 'Available', updatedat = NOW() 
        WHERE id = $1 
        RETURNING *`,
-      [id]
+      [id],
     );
 
     res.status(200).json({

@@ -603,7 +603,15 @@ router.post(
       );
 
       // Email the warned user
-      sendAdminWarning({ id, name: userCheck?.rows[0]?.name, email: userCheck?.rows[0]?.email }, reason, warningType);
+      sendAdminWarning(
+        {
+          id,
+          name: userCheck?.rows[0]?.name,
+          email: userCheck?.rows[0]?.email,
+        },
+        reason,
+        warningType,
+      );
 
       // Update related report if provided
       if (relatedReportId) {

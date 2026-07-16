@@ -72,7 +72,7 @@ router.post(
       // Validate listing exists
       const listingCheck = await db.query(
         "SELECT id, userid FROM userlistings WHERE id = $1",
-        [id]
+        [id],
       );
 
       if (listingCheck.rows.length === 0) {
@@ -90,7 +90,7 @@ router.post(
       const duplicateCheck = await db.query(
         `SELECT id FROM reports 
        WHERE reporter_id = $1 AND reported_listing_id = $2 AND status = 'pending'`,
-        [reporterId, id]
+        [reporterId, id],
       );
 
       if (duplicateCheck.rows.length > 0) {
@@ -109,7 +109,7 @@ router.post(
 
       const reasonCheck = await db.query(
         "SELECT severity FROM report_reasons WHERE id = $1 AND is_active = true",
-        [reasonId]
+        [reasonId],
       );
 
       if (reasonCheck.rows.length === 0) {
@@ -133,14 +133,14 @@ router.post(
           customReason || null,
           evidenceUrls || null,
           priority,
-        ]
+        ],
       );
 
       // Increment report count for the listing owner (non-blocking)
       try {
         await db.query(
           "UPDATE users SET report_count = COALESCE(report_count, 0) + 1 WHERE id = $1",
-          [listingCheck.rows[0].userid]
+          [listingCheck.rows[0].userid],
         );
       } catch (countError) {
         console.warn("Warning: failed to update report_count", countError);
@@ -158,7 +158,7 @@ router.post(
       console.error("Error submitting listing report:", error);
       res.status(500).json({ error: "Failed to submit report" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -193,7 +193,7 @@ router.post(
       const duplicateCheck = await db.query(
         `SELECT id FROM reports 
        WHERE reporter_id = $1 AND reported_user_id = $2 AND report_type = 'user' AND status = 'pending'`,
-        [reporterId, id]
+        [reporterId, id],
       );
 
       if (duplicateCheck.rows.length > 0) {
@@ -211,7 +211,7 @@ router.post(
 
       const reasonCheck = await db.query(
         "SELECT severity FROM report_reasons WHERE id = $1 AND is_active = true",
-        [reasonId]
+        [reasonId],
       );
 
       if (reasonCheck.rows.length === 0) {
@@ -233,14 +233,14 @@ router.post(
           customReason || null,
           evidenceUrls || null,
           priority,
-        ]
+        ],
       );
 
       // Increment report count for the user (non-blocking)
       try {
         await db.query(
           "UPDATE users SET report_count = COALESCE(report_count, 0) + 1 WHERE id = $1",
-          [id]
+          [id],
         );
       } catch (countError) {
         console.warn("Warning: failed to update report_count", countError);
@@ -258,7 +258,7 @@ router.post(
       console.error("Error submitting user report:", error);
       res.status(500).json({ error: "Failed to submit report" });
     }
-  }
+  },
 );
 
 // =====================================================
@@ -282,7 +282,7 @@ router.get("/reports/my-reports", authMiddleware, async (req, res) => {
       LEFT JOIN users u ON r.reported_user_id = u.id AND r.report_type = 'user'
       WHERE r.reporter_id = $1
       ORDER BY r.created_at DESC`,
-      [userId]
+      [userId],
     );
 
     res.status(200).json(result.rows);
@@ -303,7 +303,7 @@ router.get("/account/status", authMiddleware, async (req, res) => {
   try {
     const userResult = await db.query(
       `SELECT is_suspended, suspension_reason, warning_count FROM users WHERE id = $1`,
-      [userId]
+      [userId],
     );
 
     if (userResult.rows.length === 0) {
@@ -319,7 +319,7 @@ router.get("/account/status", authMiddleware, async (req, res) => {
         `SELECT * FROM account_suspensions 
          WHERE user_id = $1 AND is_active = true 
          ORDER BY created_at DESC LIMIT 1`,
-        [userId]
+        [userId],
       );
       if (suspensionResult.rows.length > 0) {
         suspensionDetails = suspensionResult.rows[0];
@@ -331,7 +331,7 @@ router.get("/account/status", authMiddleware, async (req, res) => {
       `SELECT * FROM violation_warnings 
        WHERE user_id = $1 AND acknowledged = false
        ORDER BY created_at DESC`,
-      [userId]
+      [userId],
     );
 
     // Check for pending appeals
@@ -339,7 +339,7 @@ router.get("/account/status", authMiddleware, async (req, res) => {
       `SELECT * FROM appeals 
        WHERE user_id = $1 AND status = 'pending'
        ORDER BY created_at DESC`,
-      [userId]
+      [userId],
     );
 
     res.status(200).json({
@@ -389,19 +389,19 @@ router.post("/appeals/submit", authMiddleware, async (req, res) => {
       duplicateCheck = await db.query(
         `SELECT id FROM appeals 
          WHERE user_id = $1 AND suspension_id = $2 AND status = 'pending'`,
-        [userId, suspensionId]
+        [userId, suspensionId],
       );
     } else if (appealType === "warning" && warningId) {
       duplicateCheck = await db.query(
         `SELECT id FROM appeals 
          WHERE user_id = $1 AND warning_id = $2 AND status = 'pending'`,
-        [userId, warningId]
+        [userId, warningId],
       );
     } else if (appealType === "listing_removal" && listingId) {
       duplicateCheck = await db.query(
         `SELECT id FROM appeals 
          WHERE user_id = $1 AND related_listing_id = $2 AND status = 'pending'`,
-        [userId, listingId]
+        [userId, listingId],
       );
     }
 
@@ -426,7 +426,7 @@ router.post("/appeals/submit", authMiddleware, async (req, res) => {
         listingId || null,
         reason,
         evidenceUrls || null,
-      ]
+      ],
     );
 
     // Create notification for admins (optional - can be implemented)
@@ -461,7 +461,7 @@ router.get("/appeals/my-appeals", authMiddleware, async (req, res) => {
       LEFT JOIN userlistings l ON a.related_listing_id = l.id
       WHERE a.user_id = $1
       ORDER BY a.created_at DESC`,
-      [userId]
+      [userId],
     );
 
     res.status(200).json(result.rows);
@@ -486,7 +486,7 @@ router.get("/warnings/my-warnings", authMiddleware, async (req, res) => {
       LEFT JOIN userlistings l ON w.related_listing_id = l.id
       WHERE w.user_id = $1
       ORDER BY w.created_at DESC`,
-      [userId]
+      [userId],
     );
 
     res.status(200).json(result.rows);
@@ -507,7 +507,7 @@ router.put("/warnings/:id/acknowledge", authMiddleware, async (req, res) => {
     // Verify warning belongs to user
     const warningCheck = await db.query(
       "SELECT * FROM violation_warnings WHERE id = $1 AND user_id = $2",
-      [id, userId]
+      [id, userId],
     );
 
     if (warningCheck.rows.length === 0) {
@@ -518,7 +518,7 @@ router.put("/warnings/:id/acknowledge", authMiddleware, async (req, res) => {
       `UPDATE violation_warnings 
        SET acknowledged = true, acknowledged_at = NOW() 
        WHERE id = $1`,
-      [id]
+      [id],
     );
 
     res.status(200).json({ message: "Warning acknowledged" });

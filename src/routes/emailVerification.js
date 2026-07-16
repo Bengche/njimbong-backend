@@ -9,7 +9,9 @@ router.get("/verify-email", async (req, res) => {
   const { token } = req.query;
 
   if (!token || typeof token !== "string" || token.length > 200) {
-    return res.status(400).json({ success: false, message: "Invalid or missing token." });
+    return res
+      .status(400)
+      .json({ success: false, message: "Invalid or missing token." });
   }
 
   try {
@@ -20,27 +22,41 @@ router.get("/verify-email", async (req, res) => {
        FROM email_verifications ev
        JOIN users u ON u.id = ev.user_id
        WHERE ev.token = $1`,
-      [token]
+      [token],
     );
 
     if (result.rows.length === 0) {
-      return res.status(400).json({ success: false, message: "Verification link is invalid." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Verification link is invalid." });
     }
 
     const row = result.rows[0];
 
     if (row.used_at) {
-      return res.status(400).json({ success: false, message: "This link has already been used." });
+      return res
+        .status(400)
+        .json({ success: false, message: "This link has already been used." });
     }
 
     if (new Date(row.expires_at) < new Date()) {
-      return res.status(400).json({ success: false, message: "This verification link has expired." });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "This verification link has expired.",
+        });
     }
 
     // Mark token as used and user as verified in a single transaction
     await db.query("BEGIN");
-    await db.query("UPDATE email_verifications SET used_at = NOW() WHERE id = $1", [row.id]);
-    await db.query("UPDATE users SET email_verified = TRUE WHERE id = $1", [row.user_id]);
+    await db.query(
+      "UPDATE email_verifications SET used_at = NOW() WHERE id = $1",
+      [row.id],
+    );
+    await db.query("UPDATE users SET email_verified = TRUE WHERE id = $1", [
+      row.user_id,
+    ]);
     await db.query("COMMIT");
 
     // Send welcome email only on first verification
@@ -48,11 +64,16 @@ router.get("/verify-email", async (req, res) => {
       sendWelcomeEmail({ name: row.name, email: row.email });
     }
 
-    return res.json({ success: true, message: "Email verified successfully. Welcome to Njimbong!" });
+    return res.json({
+      success: true,
+      message: "Email verified successfully. Welcome to Njimbong!",
+    });
   } catch (err) {
     await db.query("ROLLBACK").catch(() => {});
     console.error("Email verification error:", err.message);
-    return res.status(500).json({ success: false, message: "Server error. Please try again." });
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error. Please try again." });
   }
 });
 

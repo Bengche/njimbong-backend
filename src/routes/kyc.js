@@ -191,7 +191,10 @@ router.post(
       );
 
       // Email admin about new KYC submission
-      const userForEmail = await db.query("SELECT id, name, email FROM users WHERE id = $1", [userId]);
+      const userForEmail = await db.query(
+        "SELECT id, name, email FROM users WHERE id = $1",
+        [userId],
+      );
       if (userForEmail.rows.length > 0) {
         sendKycSubmittedAdmin(userForEmail.rows[0], result.rows[0].id);
       }
@@ -330,7 +333,10 @@ router.put("/kyc/approve/:id", authMiddleware, async (req, res) => {
     );
 
     // Email user about KYC approval
-    const approvedUserResult = await db.query("SELECT id, name, email FROM users WHERE id = $1", [kyc.userid]);
+    const approvedUserResult = await db.query(
+      "SELECT id, name, email FROM users WHERE id = $1",
+      [kyc.userid],
+    );
     if (approvedUserResult.rows.length > 0) {
       sendKycApproved(approvedUserResult.rows[0]);
     }
@@ -402,7 +408,10 @@ router.put("/kyc/reject/:id", authMiddleware, async (req, res) => {
     );
 
     // Email user about KYC rejection
-    const rejectedUserResult = await db.query("SELECT id, name, email FROM users WHERE id = $1", [kyc.userid]);
+    const rejectedUserResult = await db.query(
+      "SELECT id, name, email FROM users WHERE id = $1",
+      [kyc.userid],
+    );
     if (rejectedUserResult.rows.length > 0) {
       sendKycRejected(rejectedUserResult.rows[0], reason);
     }

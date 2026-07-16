@@ -1,7 +1,10 @@
 import express from "express";
 import db from "../db.js";
 import { verifyFonlokWebhook } from "../services/fonlok.js";
-import { sendPaymentConfirmedBuyer, sendPaymentConfirmedSeller } from "../utils/email.js";
+import {
+  sendPaymentConfirmedBuyer,
+  sendPaymentConfirmedSeller,
+} from "../utils/email.js";
 
 const router = express.Router();
 
@@ -65,15 +68,30 @@ async function handleFonlokEvent(eventType, event) {
       // Fetch user emails and listing details for email notifications
       try {
         const [buyerRes, sellerRes, listingRes] = await Promise.all([
-          db.query("SELECT id, name, email FROM users WHERE id = $1", [order.buyer_id]),
-          db.query("SELECT id, name, email FROM users WHERE id = $1", [order.seller_id]),
-          db.query("SELECT l.title FROM orders o JOIN listings l ON l.id = o.listing_id WHERE o.id = $1", [order.id]),
+          db.query("SELECT id, name, email FROM users WHERE id = $1", [
+            order.buyer_id,
+          ]),
+          db.query("SELECT id, name, email FROM users WHERE id = $1", [
+            order.seller_id,
+          ]),
+          db.query(
+            "SELECT l.title FROM orders o JOIN listings l ON l.id = o.listing_id WHERE o.id = $1",
+            [order.id],
+          ),
         ]);
         if (buyerRes.rows.length > 0 && listingRes.rows.length > 0) {
-          sendPaymentConfirmedBuyer(buyerRes.rows[0], listingRes.rows[0], order.id);
+          sendPaymentConfirmedBuyer(
+            buyerRes.rows[0],
+            listingRes.rows[0],
+            order.id,
+          );
         }
         if (sellerRes.rows.length > 0 && listingRes.rows.length > 0) {
-          sendPaymentConfirmedSeller(sellerRes.rows[0], listingRes.rows[0], order.id);
+          sendPaymentConfirmedSeller(
+            sellerRes.rows[0],
+            listingRes.rows[0],
+            order.id,
+          );
         }
       } catch (emailErr) {
         console.error("[FonlokWebhook] email notification error:", emailErr);
