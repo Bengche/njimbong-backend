@@ -6,6 +6,12 @@ import {
   sendPaymentConfirmedSeller,
 } from "../utils/email.js";
 
+// Startup migration: add 'In Escrow' to the allowed values if the check
+// constraint exists. On Railway we can't easily alter constraints, so
+// we log a reminder instead — the DB constraint was defined with open-ended
+// VARCHAR so 'In Escrow' will be accepted as long as the constraint below is
+// not present.  If it is, a DBA must add the value manually.
+
 const router = express.Router();
 
 /**
@@ -40,14 +46,17 @@ router.post(
     // Respond 200 immediately; process async so Fonlok's 8-second timeout is never hit
     res.status(200).json({ received: true });
 
-    handleFonlokEvent(eventType, event).catch((err) =>
+    handleFonlokEvent(event).catch((err) =>
       console.error("[FonlokWebhook] handler error:", err),
     );
   },
 );
 
-async function handleFonlokEvent(eventType, event) {
-  const { invoice_id, reference } = event;
+async function handleFonlokEvent(event) {
+  // payment.confirmed uses `invoice_number`; all other events use `invoice_id`
+  const eventType = event.type;
+  const invoice_id = event.invoice_id || event.invoice_number;
+  const { reference } = event;
 
   switch (eventType) {
     case "payment.confirmed": {
@@ -57,7 +66,7 @@ async function handleFonlokEvent(eventType, event) {
          SET fonlok_status = 'paid_in_escrow', updated_at = NOW()
          WHERE fonlok_invoice_id = $1
            AND fonlok_status NOT IN ('paid_in_escrow', 'released', 'disputed', 'cancelled')
-         RETURNING id, buyer_id, seller_id`,
+         RETURNING id, buyer_id, seller_id, listing_id`,
         [invoice_id],
       );
 
@@ -65,31 +74,45 @@ async function handleFonlokEvent(eventType, event) {
 
       const order = result.rows[0];
 
-      // Fetch user emails and listing details for email notifications
+      // Mark the listing as reserved — prevents any new buyer from paying
+      await db.query(
+        `UPDATE userlistings SET status = 'In Escrow' WHERE id = $1`,
+        [order.listing_id],
+      );
+
+      // Fetch all details needed for notifications and emails in one query
       try {
-        const [buyerRes, sellerRes, listingRes] = await Promise.all([
-          db.query("SELECT id, name, email FROM users WHERE id = $1", [
-            order.buyer_id,
-          ]),
-          db.query("SELECT id, name, email FROM users WHERE id = $1", [
-            order.seller_id,
-          ]),
-          db.query(
-            "SELECT l.title FROM orders o JOIN listings l ON l.id = o.listing_id WHERE o.id = $1",
-            [order.id],
-          ),
-        ]);
-        if (buyerRes.rows.length > 0 && listingRes.rows.length > 0) {
-          sendPaymentConfirmedBuyer(
-            buyerRes.rows[0],
-            listingRes.rows[0],
-            order.id,
-          );
-        }
-        if (sellerRes.rows.length > 0 && listingRes.rows.length > 0) {
+        const detailsRes = await db.query(
+          `SELECT
+             ul.title,
+             o.amount,
+             o.currency,
+             buyer.name  AS buyer_name,
+             buyer.email AS buyer_email,
+             seller.name AS seller_name,
+             COALESCE(ul.seller_email, seller.email) AS seller_contact_email
+           FROM orders o
+           JOIN userlistings ul  ON ul.id  = o.listing_id
+           JOIN users buyer     ON buyer.id  = o.buyer_id
+           JOIN users seller    ON seller.id = o.seller_id
+           WHERE o.id = $1`,
+          [order.id],
+        );
+
+        if (detailsRes.rows.length > 0) {
+          const d = detailsRes.rows[0];
+
           sendPaymentConfirmedSeller(
-            sellerRes.rows[0],
-            listingRes.rows[0],
+            { name: d.seller_name, email: d.seller_contact_email },
+            { title: d.title },
+            order.id,
+            d.amount,
+            d.currency,
+          );
+
+          sendPaymentConfirmedBuyer(
+            { name: d.buyer_name, email: d.buyer_email },
+            { title: d.title, amount: d.amount, currency: d.currency },
             order.id,
           );
         }
@@ -97,14 +120,14 @@ async function handleFonlokEvent(eventType, event) {
         console.error("[FonlokWebhook] email notification error:", emailErr);
       }
 
-      // Notify seller
+      // In-app: notify seller
       await db.query(
         `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
-         VALUES ($1, 'New secured order', 'A buyer''s payment is secured in escrow. Prepare to ship the item.', 'payment', $2, 'order')`,
+         VALUES ($1, 'New secured order', 'A buyer''s payment is secured in escrow. Prepare to deliver the item.', 'payment', $2, 'order')`,
         [order.seller_id, order.id],
       );
 
-      // Notify buyer
+      // In-app: notify buyer
       await db.query(
         `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
          VALUES ($1, 'Payment confirmed', 'Your payment is safely held in escrow. The seller will now prepare your item.', 'payment', $2, 'order')`,
@@ -124,11 +147,18 @@ async function handleFonlokEvent(eventType, event) {
       );
 
       const releasedOrder = await db.query(
-        `SELECT id, buyer_id, seller_id FROM orders WHERE fonlok_invoice_id = $1`,
+        `SELECT id, buyer_id, seller_id, listing_id FROM orders WHERE fonlok_invoice_id = $1`,
         [invoice_id],
       );
       if (releasedOrder.rows.length > 0) {
         const o = releasedOrder.rows[0];
+
+        // Mark the listing as Sold now that funds have been disbursed
+        await db.query(
+          `UPDATE userlistings SET status = 'Sold' WHERE id = $1`,
+          [o.listing_id],
+        );
+
         await db.query(
           `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
            VALUES ($1, 'Payment received', 'Funds have been sent to your MoMo number. Order complete.', 'payment', $2, 'order')`,

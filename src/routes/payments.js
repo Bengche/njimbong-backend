@@ -57,36 +57,50 @@ router.post(
       });
     }
 
+    // ── Phase 1: Concurrency-safe reservation ────────────────────────────────
+    // Use a short DB transaction with SELECT … FOR UPDATE to lock the listing
+    // row.  Any other concurrent initiation for the same listing will block
+    // until this transaction commits, then fail the active-order check below.
+    // ─────────────────────────────────────────────────────────────────────────
+    let listing, dbOrderId, orderId;
+    const client = await db.connect();
     try {
-      // Fetch the listing and both users in one query
-      const listingResult = await db.query(
-        `SELECT l.id, l.title, l.description, l.price, l.currency, l.userid AS seller_id,
-              l.phone AS listing_phone,
-              COALESCE(l.seller_email, s.email) AS seller_email,
-              s.name AS seller_name
-       FROM userlistings l
-       JOIN users s ON s.id = l.userid
-       WHERE l.id = $1
-         AND l.status = 'Available'
-         AND l.moderation_status = 'approved'`,
+      await client.query("BEGIN");
+
+      // Lock this listing row for the duration of the transaction
+      const listingResult = await client.query(
+        `SELECT l.id, l.title, l.description, l.price, l.currency,
+                l.userid AS seller_id,
+                l.phone  AS listing_phone,
+                COALESCE(l.seller_email, s.email) AS seller_email,
+                s.name AS seller_name
+         FROM userlistings l
+         JOIN users s ON s.id = l.userid
+         WHERE l.id = $1
+           AND l.status = 'Available'
+           AND l.moderation_status = 'approved'
+         FOR UPDATE OF l`,
         [listing_id],
       );
 
       if (listingResult.rows.length === 0) {
+        await client.query("ROLLBACK");
         return res
           .status(404)
           .json({ error: "Listing not found or not available for purchase." });
       }
 
-      const listing = listingResult.rows[0];
+      listing = listingResult.rows[0];
 
       if (listing.seller_id === buyer_id) {
+        await client.query("ROLLBACK");
         return res
           .status(400)
           .json({ error: "You cannot purchase your own listing." });
       }
 
       if (listing.currency !== "XAF") {
+        await client.query("ROLLBACK");
         return res.status(400).json({
           error:
             "Fonlok escrow is only supported for XAF-priced listings at this time.",
@@ -94,32 +108,66 @@ router.post(
       }
 
       if (Number(listing.price) < 500) {
+        await client.query("ROLLBACK");
         return res.status(400).json({
           error: "Listing price is below the minimum escrow amount (500 XAF).",
         });
       }
 
-      // Prevent duplicate in-flight orders for the same listing by this buyer
-      const existingOrder = await db.query(
+      // Block if ANY buyer already has an active order for this listing
+      const existingOrder = await client.query(
         `SELECT id FROM orders
-       WHERE listing_id = $1
-         AND buyer_id = $2
-         AND fonlok_status IN ('pending', 'paid_in_escrow')`,
-        [listing_id, buyer_id],
+         WHERE listing_id = $1
+           AND fonlok_status IN ('none', 'pending', 'paid_in_escrow')
+         LIMIT 1`,
+        [listing_id],
       );
 
       if (existingOrder.rows.length > 0) {
+        await client.query("ROLLBACK");
         return res.status(409).json({
-          error: "You already have an active order for this listing.",
+          error:
+            "This item already has a payment in progress. Please try again shortly.",
         });
       }
 
-      const orderId = `${listing_id}-${buyer_id}-${Date.now()}`;
+      // Insert a placeholder order ('none') to claim this slot before releasing
+      // the lock.  If the Fonlok call fails, we mark it 'initiation_failed' so
+      // the next buyer can try.
+      orderId = `${listing_id}-${buyer_id}-${Date.now()}`;
+      const orderResult = await client.query(
+        `INSERT INTO orders
+           (listing_id, buyer_id, seller_id, amount, currency,
+            fonlok_status, order_reference)
+         VALUES ($1, $2, $3, $4, 'XAF', 'none', $5)
+         RETURNING id`,
+        [
+          listing_id,
+          buyer_id,
+          listing.seller_id,
+          Math.round(Number(listing.price)),
+          orderId,
+        ],
+      );
+      dbOrderId = orderResult.rows[0].id;
+
+      await client.query("COMMIT");
+    } catch (txErr) {
+      await client.query("ROLLBACK").catch(() => {});
+      console.error("[Payments] reservation transaction error:", txErr.message);
+      return res
+        .status(500)
+        .json({ error: "Payment initiation failed. Please try again." });
+    } finally {
+      client.release();
+    }
+
+    // ── Phase 2: External Fonlok calls (outside the transaction) ────────────
+    try {
       const expiresAt = new Date(
         Date.now() + 7 * 24 * 60 * 60 * 1000,
-      ).toISOString(); // 7 days
+      ).toISOString();
 
-      // Normalise seller phone (listing contact phone)
       const rawSellerDigits = (listing.listing_phone || "").replace(/\D/g, "");
       const normalisedSellerPhone = rawSellerDigits
         ? rawSellerDigits.startsWith("237")
@@ -143,25 +191,16 @@ router.post(
         }),
       );
 
-      // Step 2 — Persist order immediately with invoice data (before initiating payment
-      //           so we can always recover state even if the next step fails)
-      const orderResult = await db.query(
-        `INSERT INTO orders
-         (listing_id, buyer_id, seller_id, amount, currency,
-          fonlok_invoice_id, fonlok_payment_url, fonlok_status, order_reference)
-       VALUES ($1, $2, $3, $4, 'XAF', $5, $6, 'pending', $7)
-       RETURNING id`,
-        [
-          listing_id,
-          buyer_id,
-          listing.seller_id,
-          Math.round(Number(listing.price)),
-          invoice.id,
-          invoice.payment_url,
-          orderId,
-        ],
+      // Step 2 — Update order with invoice data
+      await db.query(
+        `UPDATE orders
+         SET fonlok_invoice_id  = $1,
+             fonlok_payment_url = $2,
+             fonlok_status      = 'pending',
+             updated_at         = NOW()
+         WHERE id = $3`,
+        [invoice.id, invoice.payment_url, dbOrderId],
       );
-      const dbOrderId = orderResult.rows[0].id;
 
       // Step 3 — Trigger MoMo payment prompt
       let payment;
@@ -207,6 +246,12 @@ router.post(
         status: "pending",
       });
     } catch (err) {
+      // Release the placeholder so another buyer can attempt
+      await db.query(
+        `UPDATE orders SET fonlok_status = 'initiation_failed', updated_at = NOW() WHERE id = $1`,
+        [dbOrderId],
+      ).catch(() => {});
+
       console.error(
         "[Payments] initiate error:",
         err.response?.data || err.message,

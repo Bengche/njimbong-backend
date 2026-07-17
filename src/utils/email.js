@@ -406,50 +406,85 @@ export async function sendAdminWarning(user, reason, severity) {
 // ─── 12. Payment confirmed (escrow funded) — notify buyer + seller ────────────
 
 export async function sendPaymentConfirmedBuyer(user, listing, orderId) {
+  const formattedAmount = Number(listing.amount).toLocaleString("en-US");
+  const dashboardLink = `${APP_URL}/dashboard`;
   const html = wrap(
     "Payment Secured in Escrow — Njimbong",
     `
-    <p class="greeting">Your payment is secured</p>
-    <p class="text">Your payment for the item below has been received and is held securely in escrow by Fonlok. The seller has been notified and will prepare your item for delivery.</p>
+    <p class="greeting">Your payment is held securely, ${user.name}.</p>
+    <p class="text">Your payment has been confirmed and is now held safely in escrow. The seller has been notified and will prepare your item for delivery. Your funds are fully protected — they will not be released until you confirm receipt.</p>
     <div class="info-box">
+      <p style="font-size:14px;font-weight:700;color:#15803d;margin-bottom:12px;">Order Summary</p>
       <div class="info-row"><span class="info-label">Item</span><span class="info-value">${listing.title}</span></div>
-      <div class="info-row"><span class="info-label">Amount</span><span class="info-value">${Number(listing.price).toLocaleString()} ${listing.currency}</span></div>
-      <div class="info-row"><span class="info-label">Order ref</span><span class="info-value">#${orderId}</span></div>
+      <div class="info-row"><span class="info-label">Amount Paid</span><span class="info-value" style="font-size:15px;font-weight:700;color:#15803d;">${formattedAmount} ${listing.currency}</span></div>
+      <div class="info-row"><span class="info-label">Order Reference</span><span class="info-value">#${orderId}</span></div>
+      <div class="info-row"><span class="info-label">Status</span><span class="info-value"><span class="badge badge-green">Funds in Escrow</span></span></div>
     </div>
-    <p class="text"><strong>Next step:</strong> Once you receive and confirm the item, release the funds to the seller on <a href="https://fonlok.com" style="color:#16a34a;">fonlok.com</a>. Funds will not be released until you confirm receipt.</p>
+    <div class="info-box-amber">
+      <p style="font-size:14px;font-weight:700;color:#92400e;margin-bottom:10px;">What happens next?</p>
+      <p style="font-size:14px;color:#374151;line-height:1.8;">
+        1. The seller will contact you through Njimbong to arrange delivery.<br/>
+        2. Inspect the item carefully upon receipt.<br/>
+        3. Once you are satisfied, release the funds to the seller from your Njimbong dashboard.<br/>
+        4. <strong>Do not release funds until you have received and inspected the item.</strong>
+      </p>
+    </div>
     <p style="text-align:center;margin:28px 0;">
-      <a href="https://fonlok.com" class="btn">Release funds on Fonlok</a>
+      <a href="${dashboardLink}" class="btn">Go to your Dashboard</a>
     </p>
     <hr class="divider"/>
-    <p class="meta">For disputes or issues, contact <a href="mailto:support@njimbong.com">support@njimbong.com</a>.</p>
+    <p class="meta">If you have an issue with this order, contact us at <a href="mailto:support@njimbong.com">support@njimbong.com</a> quoting reference <strong>#${orderId}</strong>.</p>
   `,
   );
   await send({
     to: user.email,
-    subject: `Payment secured for "${listing.title}" — Njimbong`,
+    subject: `Your payment for "${listing.title}" is secured — Njimbong`,
     html,
   });
 }
 
-export async function sendPaymentConfirmedSeller(user, listing, orderId) {
+export async function sendPaymentConfirmedSeller(user, listing, orderId, amount, currency) {
+  const formattedAmount = Number(amount).toLocaleString("en-US");
+  const formattedNet = (Number(amount) * 0.98).toLocaleString("en-US", { maximumFractionDigits: 0 });
+  const dashboardLink = `${APP_URL}/dashboard`;
   const html = wrap(
-    "New Secured Order — Njimbong",
+    "Your Item Has Been Paid For — Njimbong",
     `
-    <p class="greeting">A buyer has paid for your listing</p>
-    <p class="text">A buyer's payment for your listing below has been received and is held in escrow by Fonlok. Please prepare the item for delivery.</p>
+    <p class="greeting">Congratulations, ${user.name} — your item has been paid for.</p>
+    <p class="text">A buyer has successfully paid for your listing on Njimbong. The full payment is now held securely in escrow by Fonlok and is awaiting your delivery. Once the buyer confirms receipt, the funds will be sent directly to your registered Mobile Money number.</p>
+
     <div class="info-box">
-      <div class="info-row"><span class="info-label">Item</span><span class="info-value">${listing.title}</span></div>
-      <div class="info-row"><span class="info-label">Amount</span><span class="info-value">${Number(listing.price).toLocaleString()} ${listing.currency}</span></div>
-      <div class="info-row"><span class="info-label">Order ref</span><span class="info-value">#${orderId}</span></div>
+      <p style="font-size:14px;font-weight:700;color:#15803d;margin-bottom:12px;">Order Details</p>
+      <div class="info-row"><span class="info-label">Item Sold</span><span class="info-value">${listing.title}</span></div>
+      <div class="info-row"><span class="info-label">Amount Paid</span><span class="info-value" style="font-size:16px;font-weight:700;color:#15803d;">${formattedAmount} ${currency}</span></div>
+      <div class="info-row"><span class="info-label">You Will Receive</span><span class="info-value" style="font-weight:600;">≈ ${formattedNet} ${currency} <span style="font-size:12px;color:#71717a;">(after 2% Fonlok fee)</span></span></div>
+      <div class="info-row"><span class="info-label">Order Reference</span><span class="info-value">#${orderId}</span></div>
+      <div class="info-row"><span class="info-label">Escrow Status</span><span class="info-value"><span class="badge badge-green">Funds Secured</span></span></div>
     </div>
-    <p class="text"><strong>Important:</strong> Funds will be released to your Mobile Money number once the buyer confirms receipt on <a href="https://fonlok.com" style="color:#16a34a;">fonlok.com</a>. Ship promptly to ensure a smooth transaction.</p>
+
+    <div class="info-box-amber">
+      <p style="font-size:14px;font-weight:700;color:#92400e;margin-bottom:10px;">Action Required — Please Deliver the Item</p>
+      <p style="font-size:14px;color:#374151;line-height:1.8;">
+        1. Contact the buyer through your Njimbong chat to arrange delivery.<br/>
+        2. Deliver the item exactly as described in your listing.<br/>
+        3. Once the buyer confirms receipt on Njimbong, the funds are automatically released to your Mobile Money number.<br/>
+        4. <strong>Do not ask the buyer to release funds before they have received the item.</strong>
+      </p>
+    </div>
+
+    <p class="text" style="color:#374151;">The buyer's payment of <strong>${formattedAmount} ${currency}</strong> is held securely by Fonlok. Fonlok will deduct their standard 2% platform fee at the time of payout, and the remaining <strong>≈ ${formattedNet} ${currency}</strong> will be sent directly to your Mobile Money number.</p>
+
+    <p style="text-align:center;margin:28px 0;">
+      <a href="${dashboardLink}" class="btn">View Order on Dashboard</a>
+    </p>
+
     <hr class="divider"/>
-    <p class="meta">For questions about the payout, contact <a href="mailto:support@njimbong.com">support@njimbong.com</a>.</p>
+    <p class="meta">If you have questions about this order or the payout process, contact us at <a href="mailto:support@njimbong.com">support@njimbong.com</a> with order reference <strong>#${orderId}</strong>.<br/>For disputes, email <a href="mailto:support@fonlok.com">support@fonlok.com</a> with the same reference.</p>
   `,
   );
   await send({
     to: user.email,
-    subject: `New secured order for "${listing.title}" — Njimbong`,
+    subject: `Your listing "${listing.title}" has been paid for — deliver now`,
     html,
   });
 }
