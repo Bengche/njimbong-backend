@@ -159,6 +159,7 @@ app.use("/api", wishlist);
 app.use("/api/analytics", analytics);
 app.use("/auth", logout);
 app.use("/home", homeListings);
+app.use("/api", payments);
 
 app.get("/", (req, res) => {
   res.status(200).json({ status: "ok" });
