@@ -443,9 +443,17 @@ export async function sendPaymentConfirmedBuyer(user, listing, orderId) {
   });
 }
 
-export async function sendPaymentConfirmedSeller(user, listing, orderId, amount, currency) {
+export async function sendPaymentConfirmedSeller(
+  user,
+  listing,
+  orderId,
+  amount,
+  currency,
+) {
   const formattedAmount = Number(amount).toLocaleString("en-US");
-  const formattedNet = (Number(amount) * 0.98).toLocaleString("en-US", { maximumFractionDigits: 0 });
+  const formattedNet = (Number(amount) * 0.98).toLocaleString("en-US", {
+    maximumFractionDigits: 0,
+  });
   const dashboardLink = `${APP_URL}/dashboard`;
   const html = wrap(
     "Your Item Has Been Paid For — Njimbong",
@@ -489,7 +497,122 @@ export async function sendPaymentConfirmedSeller(user, listing, orderId, amount,
   });
 }
 
-// ─── 13. New report submitted — notify admin ──────────────────────────────────
+// ─── 13. Payout released — notify seller ─────────────────────────────────────
+
+export async function sendPaymentReleasedSeller(
+  user,
+  listing,
+  orderId,
+  grossAmount,
+  netAmount,
+  fee,
+  currency,
+  reviewLink,
+) {
+  const fmtGross = Number(grossAmount).toLocaleString("en-US");
+  const fmtNet = Number(netAmount).toLocaleString("en-US", {
+    maximumFractionDigits: 0,
+  });
+  const fmtFee = Number(fee).toLocaleString("en-US", {
+    maximumFractionDigits: 0,
+  });
+  const html = wrap(
+    "Payout Sent to Your MoMo — Njimbong",
+    `
+    <p class="greeting">Your payout has been sent, ${user.name}.</p>
+    <p class="text">The buyer has confirmed receipt of your item and the funds have been released from escrow. Your payment has been dispatched directly to your registered Mobile Money number.</p>
+
+    <div class="info-box">
+      <p style="font-size:14px;font-weight:700;color:#15803d;margin-bottom:12px;">Payout Summary</p>
+      <div class="info-row"><span class="info-label">Item Sold</span><span class="info-value">${listing.title}</span></div>
+      <div class="info-row"><span class="info-label">Gross Amount</span><span class="info-value">${fmtGross} ${currency}</span></div>
+      <div class="info-row"><span class="info-label">Fonlok Fee (2%)</span><span class="info-value" style="color:#b91c1c;">− ${fmtFee} ${currency}</span></div>
+      <div class="info-row" style="border-top:1px solid #bbf7d0;padding-top:10px;margin-top:6px;">
+        <span class="info-label" style="font-weight:700;">You Received</span>
+        <span class="info-value" style="font-size:18px;font-weight:800;color:#15803d;">${fmtNet} ${currency}</span>
+      </div>
+      <div class="info-row"><span class="info-label">Order Reference</span><span class="info-value">#${orderId}</span></div>
+      <div class="info-row"><span class="info-label">Status</span><span class="info-value"><span class="badge badge-green">Payout Complete</span></span></div>
+    </div>
+
+    <p class="text">Please check your Mobile Money balance to confirm receipt of <strong>${fmtNet} ${currency}</strong>. If you do not see it within 24 hours, contact <a href="mailto:support@fonlok.com" style="color:#16a34a;">support@fonlok.com</a> with your order reference.</p>
+
+    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px 20px;margin:20px 0;">
+      <p style="font-size:14px;font-weight:700;color:#0369a1;margin-bottom:8px;">Leave a Review for Your Buyer</p>
+      <p style="font-size:14px;color:#374151;line-height:1.7;">Help build trust on Njimbong by sharing your experience with this buyer. Reviews are visible to the entire community.</p>
+      <p style="text-align:center;margin-top:14px;">
+        <a href="${reviewLink}" style="display:inline-block;background:#0369a1;color:#ffffff !important;text-decoration:none;padding:11px 28px;border-radius:8px;font-size:14px;font-weight:600;">Leave a Review</a>
+      </p>
+    </div>
+
+    <p style="text-align:center;margin:28px 0;">
+      <a href="${APP_URL}/dashboard" class="btn">Go to your Dashboard</a>
+    </p>
+
+    <hr class="divider"/>
+    <p class="meta">
+      Thank you for selling on Njimbong. For payout questions, contact <a href="mailto:support@fonlok.com">support@fonlok.com</a>
+      with reference <strong>#${orderId}</strong>.<br/>
+      For platform support, contact <a href="mailto:support@njimbong.com">support@njimbong.com</a>.
+    </p>
+  `,
+  );
+  await send({
+    to: user.email,
+    subject: `Payout of ${fmtNet} ${currency} sent for "${listing.title}" — Njimbong`,
+    html,
+  });
+}
+
+// ─── 14. Transaction complete — notify buyer ──────────────────────────────────
+
+export async function sendPaymentReleasedBuyer(
+  user,
+  listing,
+  orderId,
+  amount,
+  currency,
+  reviewLink,
+) {
+  const fmtAmount = Number(amount).toLocaleString("en-US");
+  const html = wrap(
+    "Transaction Complete — Njimbong",
+    `
+    <p class="greeting">Transaction complete, ${user.name}.</p>
+    <p class="text">You have confirmed receipt and the funds have been released to the seller. Your transaction is now fully complete. Thank you for using Njimbong's secure escrow service.</p>
+
+    <div class="info-box">
+      <p style="font-size:14px;font-weight:700;color:#15803d;margin-bottom:12px;">Order Summary</p>
+      <div class="info-row"><span class="info-label">Item Purchased</span><span class="info-value">${listing.title}</span></div>
+      <div class="info-row"><span class="info-label">Amount Paid</span><span class="info-value" style="font-size:15px;font-weight:700;color:#15803d;">${fmtAmount} ${currency}</span></div>
+      <div class="info-row"><span class="info-label">Order Reference</span><span class="info-value">#${orderId}</span></div>
+      <div class="info-row"><span class="info-label">Status</span><span class="info-value"><span class="badge badge-green">Complete</span></span></div>
+    </div>
+
+    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px 20px;margin:20px 0;">
+      <p style="font-size:14px;font-weight:700;color:#0369a1;margin-bottom:8px;">Share Your Experience</p>
+      <p style="font-size:14px;color:#374151;line-height:1.7;">How was your experience with this seller? Your honest review helps other buyers make confident decisions and rewards trustworthy sellers on Njimbong.</p>
+      <p style="text-align:center;margin-top:14px;">
+        <a href="${reviewLink}" style="display:inline-block;background:#0369a1;color:#ffffff !important;text-decoration:none;padding:11px 28px;border-radius:8px;font-size:14px;font-weight:600;">Review the Seller</a>
+      </p>
+    </div>
+
+    <p style="text-align:center;margin:28px 0;">
+      <a href="${APP_URL}/dashboard" class="btn">Go to your Dashboard</a>
+    </p>
+
+    <hr class="divider"/>
+    <p class="meta">Thank you for shopping on Njimbong. For any post-sale issues, contact <a href="mailto:support@njimbong.com">support@njimbong.com</a> with reference <strong>#${orderId}</strong>.</p>
+  `,
+  );
+  await send({
+    to: user.email,
+    subject: `Your purchase of "${listing.title}" is complete — Njimbong`,
+    html,
+  });
+}
+
+// ─── 15. New report submitted — notify admin ──────────────────────────────────
 
 export async function sendReportSubmittedAdmin(report) {
   const reviewLink = `${APP_URL}/admin_dashboard/moderation`;

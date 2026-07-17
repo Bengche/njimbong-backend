@@ -73,7 +73,8 @@ router.post(
                 l.userid AS seller_id,
                 l.phone  AS listing_phone,
                 COALESCE(l.seller_email, s.email) AS seller_email,
-                s.name AS seller_name
+                s.name  AS seller_name,
+                s.phone AS seller_account_phone
          FROM userlistings l
          JOIN users s ON s.id = l.userid
          WHERE l.id = $1
@@ -168,12 +169,22 @@ router.post(
         Date.now() + 7 * 24 * 60 * 60 * 1000,
       ).toISOString();
 
-      const rawSellerDigits = (listing.listing_phone || "").replace(/\D/g, "");
+      const rawSellerDigits = (
+        listing.listing_phone ||
+        listing.seller_account_phone ||
+        ""
+      ).replace(/\D/g, "");
       const normalisedSellerPhone = rawSellerDigits
         ? rawSellerDigits.startsWith("237")
           ? rawSellerDigits
           : "237" + rawSellerDigits
         : undefined;
+
+      if (!normalisedSellerPhone) {
+        console.warn(
+          `[Payments] Listing ${listing_id} seller has no phone number — Fonlok may reject the invoice.`,
+        );
+      }
 
       // Step 1 — Create Fonlok escrow invoice
       const invoice = await withRetry(() =>
@@ -247,10 +258,12 @@ router.post(
       });
     } catch (err) {
       // Release the placeholder so another buyer can attempt
-      await db.query(
-        `UPDATE orders SET fonlok_status = 'initiation_failed', updated_at = NOW() WHERE id = $1`,
-        [dbOrderId],
-      ).catch(() => {});
+      await db
+        .query(
+          `UPDATE orders SET fonlok_status = 'initiation_failed', updated_at = NOW() WHERE id = $1`,
+          [dbOrderId],
+        )
+        .catch(() => {});
 
       console.error(
         "[Payments] initiate error:",

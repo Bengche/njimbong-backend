@@ -4,6 +4,8 @@ import { verifyFonlokWebhook } from "../services/fonlok.js";
 import {
   sendPaymentConfirmedBuyer,
   sendPaymentConfirmedSeller,
+  sendPaymentReleasedSeller,
+  sendPaymentReleasedBuyer,
 } from "../utils/email.js";
 
 // Startup migration: add 'In Escrow' to the allowed values if the check
@@ -138,38 +140,94 @@ async function handleFonlokEvent(event) {
     }
 
     case "payment.released": {
-      await db.query(
+      const releaseUpdate = await db.query(
         `UPDATE orders
          SET fonlok_status = 'released', updated_at = NOW()
          WHERE fonlok_invoice_id = $1
-           AND fonlok_status NOT IN ('released', 'cancelled')`,
+           AND fonlok_status NOT IN ('released', 'cancelled')
+         RETURNING id, buyer_id, seller_id, listing_id`,
         [invoice_id],
       );
 
-      const releasedOrder = await db.query(
-        `SELECT id, buyer_id, seller_id, listing_id FROM orders WHERE fonlok_invoice_id = $1`,
-        [invoice_id],
+      if (releaseUpdate.rows.length === 0) break;
+      const o = releaseUpdate.rows[0];
+
+      // Mark the listing as Sold — permanently unavailable for new orders
+      await db.query(
+        `UPDATE userlistings SET status = 'Sold' WHERE id = $1`,
+        [o.listing_id],
       );
-      if (releasedOrder.rows.length > 0) {
-        const o = releasedOrder.rows[0];
 
-        // Mark the listing as Sold now that funds have been disbursed
-        await db.query(
-          `UPDATE userlistings SET status = 'Sold' WHERE id = $1`,
-          [o.listing_id],
+      // Send payout emails with review links
+      try {
+        const detailsRes = await db.query(
+          `SELECT
+             ul.title,
+             o.amount,
+             o.currency,
+             buyer.id    AS buyer_id,
+             buyer.name  AS buyer_name,
+             buyer.email AS buyer_email,
+             seller.id   AS seller_id,
+             seller.name AS seller_name,
+             COALESCE(ul.seller_email, seller.email) AS seller_contact_email
+           FROM orders o
+           JOIN userlistings ul ON ul.id  = o.listing_id
+           JOIN users buyer    ON buyer.id  = o.buyer_id
+           JOIN users seller   ON seller.id = o.seller_id
+           WHERE o.id = $1`,
+          [o.id],
         );
 
-        await db.query(
-          `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
-           VALUES ($1, 'Payment received', 'Funds have been sent to your MoMo number. Order complete.', 'payment', $2, 'order')`,
-          [o.seller_id, o.id],
-        );
-        await db.query(
-          `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
-           VALUES ($1, 'Order complete', 'Funds have been released to the seller. Thank you for using Njimbong!', 'payment', $2, 'order')`,
-          [o.buyer_id, o.id],
-        );
+        if (detailsRes.rows.length > 0) {
+          const d = detailsRes.rows[0];
+
+          // Prefer Fonlok's actual payout figures from the event payload
+          const grossAmount = event.gross_amount  ?? Number(d.amount);
+          const platformFee = event.platform_fee  ?? Math.round(Number(d.amount) * 0.02);
+          const netAmount   = event.seller_receives ?? Math.round(Number(d.amount) * 0.98);
+          const currency    = event.currency       ?? d.currency;
+
+          // Buyer reviews the seller; seller reviews the buyer
+          const buyerReviewLink  = `${process.env.FRONTEND_URL?.split(",")[0].trim() || "https://njimbong.com"}/profile/${d.seller_id}`;
+          const sellerReviewLink = `${process.env.FRONTEND_URL?.split(",")[0].trim() || "https://njimbong.com"}/profile/${d.buyer_id}`;
+
+          sendPaymentReleasedSeller(
+            { name: d.seller_name, email: d.seller_contact_email },
+            { title: d.title },
+            o.id,
+            grossAmount,
+            netAmount,
+            platformFee,
+            currency,
+            sellerReviewLink,
+          );
+
+          sendPaymentReleasedBuyer(
+            { name: d.buyer_name, email: d.buyer_email },
+            { title: d.title },
+            o.id,
+            grossAmount,
+            currency,
+            buyerReviewLink,
+          );
+        }
+      } catch (emailErr) {
+        console.error("[FonlokWebhook] release email error:", emailErr);
       }
+
+      // In-app notifications
+      await db.query(
+        `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
+         VALUES ($1, 'Payment received', 'Funds have been sent to your MoMo number. Order complete.', 'payment', $2, 'order')`,
+        [o.seller_id, o.id],
+      );
+      await db.query(
+        `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
+         VALUES ($1, 'Order complete', 'Funds have been released to the seller. Thank you for using Njimbong!', 'payment', $2, 'order')`,
+        [o.buyer_id, o.id],
+      );
+
       break;
     }
 
