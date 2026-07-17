@@ -109,7 +109,20 @@ export async function getFonlokInvoice(invoiceId) {
  */
 export function verifyFonlokWebhook(rawBody, signatureHeader) {
   const secret = process.env.FONLOK_WEBHOOK_SECRET;
-  if (!secret) return false;
+
+  if (!secret) {
+    // Secret not yet configured — allow through so emails and order updates work.
+    // Set FONLOK_WEBHOOK_SECRET in Railway once Fonlok provides it to enforce
+    // HMAC-SHA256 verification and prevent spoofed events.
+    console.warn(
+      "[Fonlok] FONLOK_WEBHOOK_SECRET is not set. " +
+      "Webhook signature verification is DISABLED. " +
+      "Set this variable in Railway to enable security.",
+    );
+    return true;
+  }
+
+  if (!signatureHeader) return false;
   const [algo, received] = signatureHeader.split("=");
   if (algo !== "sha256" || !received) return false;
   const expected = crypto
@@ -123,6 +136,9 @@ export function verifyFonlokWebhook(rawBody, signatureHeader) {
       Buffer.from(received, "hex"),
     );
   } catch {
+    return false; // buffers of different lengths
+  }
+}
     return false; // buffers of different lengths
   }
 }

@@ -31,13 +31,16 @@ router.post(
   express.raw({ type: "application/json" }),
   async (req, res) => {
     const signatureHeader = req.headers["x-fonlok-signature"];
-    const eventType = req.headers["x-fonlok-event"];
 
-    if (!signatureHeader) {
+    // If the secret is configured, the signature header is required.
+    // If the secret is not yet configured, we skip signature checks entirely
+    // (verifyFonlokWebhook will return true and log a warning).
+    const secretConfigured = !!process.env.FONLOK_WEBHOOK_SECRET;
+    if (secretConfigured && !signatureHeader) {
       return res.status(401).json({ error: "missing_signature" });
     }
 
-    const isValid = verifyFonlokWebhook(req.body, signatureHeader);
+    const isValid = verifyFonlokWebhook(req.body, signatureHeader || "");
     if (!isValid) {
       return res.status(401).json({ error: "invalid_signature" });
     }
