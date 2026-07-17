@@ -1,7 +1,7 @@
 import axios from "axios";
 import crypto from "crypto";
 
-const BASE = "https://api.fonlok.com";
+const BASE = "https://fonlok-backend-production.up.railway.app";
 
 if (!process.env.FONLOK_API_KEY) {
   console.warn("[Fonlok] FONLOK_API_KEY environment variable is not set.");
