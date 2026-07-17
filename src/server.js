@@ -192,4 +192,11 @@ const ensureKycTriggers = async () => {
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server is running on port ${PORT}`);
   ensureKycTriggers();
+
+  // Ensure seller_email column exists on userlistings (added for Fonlok v2)
+  db.query(
+    `ALTER TABLE userlistings ADD COLUMN IF NOT EXISTS seller_email text`,
+  ).catch((err) =>
+    console.warn("seller_email migration skipped:", err.message),
+  );
 });

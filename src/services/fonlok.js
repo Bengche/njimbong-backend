@@ -20,7 +20,11 @@ const client = axios.create({
 export async function createFonlokInvoice({
   title,
   amount,
+  sellerName,
+  sellerEmail,
+  sellerPhone,
   buyerEmail,
+  buyerPhone,
   description,
   orderId,
   expiresAt,
@@ -29,7 +33,11 @@ export async function createFonlokInvoice({
     title,
     amount,
     currency: "XAF",
+    seller_name: sellerName,
+    seller_email: sellerEmail,
+    seller_phone: sellerPhone,
     buyer_email: buyerEmail,
+    buyer_phone: buyerPhone,
     description,
     reference: `njimbong-${orderId}`,
     expires_at: expiresAt,
@@ -48,6 +56,23 @@ export async function createFonlokInvoice({
     );
     throw err;
   }
+}
+
+/** Release held funds to the seller after buyer confirms receipt. */
+export async function releaseFonlokPayment(invoiceId) {
+  const { data } = await client.post("/v1/payments/release", {
+    invoice_id: invoiceId,
+  });
+  return data; // { seller_receives, platform_fee, released_at, ... }
+}
+
+/** Flag a paid invoice as disputed. */
+export async function disputeFonlokPayment(invoiceId, reason) {
+  const { data } = await client.post("/v1/payments/dispute", {
+    invoice_id: invoiceId,
+    reason,
+  });
+  return data;
 }
 
 /** Trigger a MoMo prompt on the buyer's phone. */

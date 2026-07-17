@@ -55,6 +55,7 @@ router.post(
       phone,
       tags,
       status,
+      seller_email,
     } = req.body;
 
     try {
@@ -71,6 +72,7 @@ router.post(
         city,
         condition,
         phone,
+        seller_email,
         tags,
         status,
         filesCount: req.files?.length,
@@ -113,8 +115,8 @@ router.post(
       // New listings start with 'pending' moderation status
       const listingResult = await db.query(
         `INSERT INTO userlistings 
-       (userid, title, description, price, currency, categoryid, location, country, city, condition, phone, tags, status, moderation_status, createdat) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW()) 
+       (userid, title, description, price, currency, categoryid, location, country, city, condition, phone, seller_email, tags, status, moderation_status, createdat) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW()) 
        RETURNING *`,
         [
           userId,
@@ -128,6 +130,7 @@ router.post(
           city,
           condition || "new",
           phone,
+          seller_email || null,
           tagsArray,
           status || "Available",
           "pending", // All new listings require admin approval

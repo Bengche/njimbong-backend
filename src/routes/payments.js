@@ -6,6 +6,8 @@ import {
   createFonlokInvoice,
   initiateFonlokPayment,
   getFonlokPaymentStatus,
+  releaseFonlokPayment,
+  disputeFonlokPayment,
 } from "../services/fonlok.js";
 
 const router = express.Router();
@@ -33,7 +35,7 @@ router.post(
   authMiddleware,
   blockIfSuspended,
   async (req, res) => {
-    const { listing_id, phone_number } = req.body;
+    const { listing_id, phone_number, buyer_email } = req.body;
     const buyer_id = req.user.id;
 
     if (!listing_id || !phone_number) {
@@ -59,16 +61,15 @@ router.post(
       // Fetch the listing and both users in one query
       const listingResult = await db.query(
         `SELECT l.id, l.title, l.description, l.price, l.currency, l.userid AS seller_id,
-              s.phone AS seller_phone,
-              b.email AS buyer_email,
-              s.email AS seller_email
+              l.phone AS listing_phone,
+              COALESCE(l.seller_email, s.email) AS seller_email,
+              s.name AS seller_name
        FROM userlistings l
-       JOIN users b ON b.id = $2
        JOIN users s ON s.id = l.userid
        WHERE l.id = $1
          AND l.status = 'Available'
          AND l.moderation_status = 'approved'`,
-        [listing_id, buyer_id],
+        [listing_id],
       );
 
       if (listingResult.rows.length === 0) {
@@ -118,8 +119,8 @@ router.post(
         Date.now() + 7 * 24 * 60 * 60 * 1000,
       ).toISOString(); // 7 days
 
-      // Normalise seller phone: strip non-digits, ensure 237 prefix
-      const rawSellerDigits = (listing.seller_phone || "").replace(/\D/g, "");
+      // Normalise seller phone (listing contact phone)
+      const rawSellerDigits = (listing.listing_phone || "").replace(/\D/g, "");
       const normalisedSellerPhone = rawSellerDigits
         ? rawSellerDigits.startsWith("237")
           ? rawSellerDigits
@@ -131,8 +132,12 @@ router.post(
         createFonlokInvoice({
           title: listing.title,
           amount: Math.round(Number(listing.price)),
-          buyerEmail: listing.buyer_email,
-          description: `Marketplace purchase: ${listing.title}`,
+          sellerName: listing.seller_name,
+          sellerEmail: listing.seller_email,
+          sellerPhone: normalisedSellerPhone,
+          buyerEmail: buyer_email || undefined,
+          buyerPhone: normalisedPhone,
+          description: listing.description,
           orderId,
           expiresAt,
         }),
@@ -165,7 +170,7 @@ router.post(
           initiateFonlokPayment({
             invoiceId: invoice.id,
             phoneNumber: normalisedPhone,
-            buyerEmail: listing.buyer_email,
+            buyerEmail: buyer_email || undefined,
           }),
         );
       } catch (paymentErr) {
@@ -310,6 +315,110 @@ router.get("/payments/:reference/status", authMiddleware, async (req, res) => {
     return res
       .status(500)
       .json({ error: "Failed to retrieve payment status." });
+  }
+});
+
+/**
+ * POST /payments/release
+ * Buyer confirms receipt — releases escrow funds to seller via Fonlok.
+ */
+router.post("/payments/release", authMiddleware, async (req, res) => {
+  const { order_id } = req.body;
+  if (!order_id) return res.status(400).json({ error: "order_id is required." });
+
+  try {
+    const orderResult = await db.query(
+      `SELECT id, fonlok_invoice_id, fonlok_status, buyer_id, seller_id
+       FROM orders WHERE id = $1`,
+      [order_id],
+    );
+
+    if (orderResult.rows.length === 0)
+      return res.status(404).json({ error: "Order not found." });
+
+    const order = orderResult.rows[0];
+
+    if (order.buyer_id !== req.user.id)
+      return res.status(403).json({ error: "Only the buyer can release funds." });
+
+    if (order.fonlok_status !== "paid_in_escrow")
+      return res.status(409).json({
+        error: "Funds can only be released after payment is confirmed in escrow.",
+      });
+
+    const release = await releaseFonlokPayment(order.fonlok_invoice_id);
+
+    await db.query(
+      `UPDATE orders SET fonlok_status = 'released', updated_at = NOW() WHERE id = $1`,
+      [order_id],
+    );
+
+    // Notify seller
+    await db.query(
+      `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
+       VALUES ($1, 'Payment released', 'The buyer has confirmed receipt. Funds have been sent to your MoMo number.', 'payment', $2, 'order')`,
+      [order.seller_id, order_id],
+    );
+
+    return res.json({
+      status: "released",
+      seller_receives: release.seller_receives,
+      platform_fee: release.platform_fee,
+      message: release.message,
+    });
+  } catch (err) {
+    console.error("[Payments] release error:", err.response?.data || err.message);
+    return res.status(500).json({ error: "Failed to release payment." });
+  }
+});
+
+/**
+ * POST /payments/dispute
+ * Buyer raises a dispute before releasing funds.
+ */
+router.post("/payments/dispute", authMiddleware, async (req, res) => {
+  const { order_id, reason } = req.body;
+  if (!order_id || !reason)
+    return res.status(400).json({ error: "order_id and reason are required." });
+
+  try {
+    const orderResult = await db.query(
+      `SELECT id, fonlok_invoice_id, fonlok_status, buyer_id, seller_id
+       FROM orders WHERE id = $1`,
+      [order_id],
+    );
+
+    if (orderResult.rows.length === 0)
+      return res.status(404).json({ error: "Order not found." });
+
+    const order = orderResult.rows[0];
+
+    if (order.buyer_id !== req.user.id)
+      return res.status(403).json({ error: "Only the buyer can raise a dispute." });
+
+    if (order.fonlok_status !== "paid_in_escrow")
+      return res.status(409).json({
+        error: "Disputes can only be raised on orders with funds in escrow.",
+      });
+
+    await disputeFonlokPayment(order.fonlok_invoice_id, reason);
+
+    await db.query(
+      `UPDATE orders SET fonlok_status = 'disputed', updated_at = NOW() WHERE id = $1`,
+      [order_id],
+    );
+
+    // Notify seller
+    await db.query(
+      `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
+       VALUES ($1, 'Dispute raised', 'A buyer has raised a dispute on your order. Funds are held pending resolution.', 'payment', $2, 'order')`,
+      [order.seller_id, order_id],
+    );
+
+    return res.json({ status: "disputed", message: "Dispute raised. Fonlok support will contact both parties." });
+  } catch (err) {
+    console.error("[Payments] dispute error:", err.response?.data || err.message);
+    return res.status(500).json({ error: "Failed to raise dispute." });
   }
 });
 

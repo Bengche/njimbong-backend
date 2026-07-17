@@ -114,6 +114,46 @@ async function handleFonlokEvent(eventType, event) {
       break;
     }
 
+    case "payment.released": {
+      await db.query(
+        `UPDATE orders
+         SET fonlok_status = 'released', updated_at = NOW()
+         WHERE fonlok_invoice_id = $1
+           AND fonlok_status NOT IN ('released', 'cancelled')`,
+        [invoice_id],
+      );
+
+      const releasedOrder = await db.query(
+        `SELECT id, buyer_id, seller_id FROM orders WHERE fonlok_invoice_id = $1`,
+        [invoice_id],
+      );
+      if (releasedOrder.rows.length > 0) {
+        const o = releasedOrder.rows[0];
+        await db.query(
+          `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
+           VALUES ($1, 'Payment received', 'Funds have been sent to your MoMo number. Order complete.', 'payment', $2, 'order')`,
+          [o.seller_id, o.id],
+        );
+        await db.query(
+          `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
+           VALUES ($1, 'Order complete', 'Funds have been released to the seller. Thank you for using Njimbong!', 'payment', $2, 'order')`,
+          [o.buyer_id, o.id],
+        );
+      }
+      break;
+    }
+
+    case "payment.disputed": {
+      await db.query(
+        `UPDATE orders
+         SET fonlok_status = 'disputed', updated_at = NOW()
+         WHERE fonlok_invoice_id = $1
+           AND fonlok_status NOT IN ('disputed', 'released', 'cancelled')`,
+        [invoice_id],
+      );
+      break;
+    }
+
     case "payment.initiated": {
       // Update to pending if the order somehow didn't get its reference set
       if (reference) {
