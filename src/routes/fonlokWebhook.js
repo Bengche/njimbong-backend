@@ -153,10 +153,9 @@ async function handleFonlokEvent(event) {
       const o = releaseUpdate.rows[0];
 
       // Mark the listing as Sold — permanently unavailable for new orders
-      await db.query(
-        `UPDATE userlistings SET status = 'Sold' WHERE id = $1`,
-        [o.listing_id],
-      );
+      await db.query(`UPDATE userlistings SET status = 'Sold' WHERE id = $1`, [
+        o.listing_id,
+      ]);
 
       // Send payout emails with review links
       try {
@@ -183,13 +182,15 @@ async function handleFonlokEvent(event) {
           const d = detailsRes.rows[0];
 
           // Prefer Fonlok's actual payout figures from the event payload
-          const grossAmount = event.gross_amount  ?? Number(d.amount);
-          const platformFee = event.platform_fee  ?? Math.round(Number(d.amount) * 0.02);
-          const netAmount   = event.seller_receives ?? Math.round(Number(d.amount) * 0.98);
-          const currency    = event.currency       ?? d.currency;
+          const grossAmount = event.gross_amount ?? Number(d.amount);
+          const platformFee =
+            event.platform_fee ?? Math.round(Number(d.amount) * 0.02);
+          const netAmount =
+            event.seller_receives ?? Math.round(Number(d.amount) * 0.98);
+          const currency = event.currency ?? d.currency;
 
           // Buyer reviews the seller; seller reviews the buyer
-          const buyerReviewLink  = `${process.env.FRONTEND_URL?.split(",")[0].trim() || "https://njimbong.com"}/profile/${d.seller_id}`;
+          const buyerReviewLink = `${process.env.FRONTEND_URL?.split(",")[0].trim() || "https://njimbong.com"}/profile/${d.seller_id}`;
           const sellerReviewLink = `${process.env.FRONTEND_URL?.split(",")[0].trim() || "https://njimbong.com"}/profile/${d.buyer_id}`;
 
           sendPaymentReleasedSeller(
