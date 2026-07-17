@@ -189,8 +189,6 @@ const ensureKycTriggers = async () => {
   }
 };
 
-app.use("/api", payments);
-
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server is running on port ${PORT}`);
   ensureKycTriggers();

@@ -23,7 +23,6 @@ import {
   sendPushToUser,
 } from "../utils/pushNotifications.js";
 import { sendListingApproved, sendListingRejected } from "../utils/email.js";
-import { sendListingApproved, sendListingRejected } from "../utils/email.js";
 
 const router = express.Router();
 
