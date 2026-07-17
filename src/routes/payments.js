@@ -324,7 +324,8 @@ router.get("/payments/:reference/status", authMiddleware, async (req, res) => {
  */
 router.post("/payments/release", authMiddleware, async (req, res) => {
   const { order_id } = req.body;
-  if (!order_id) return res.status(400).json({ error: "order_id is required." });
+  if (!order_id)
+    return res.status(400).json({ error: "order_id is required." });
 
   try {
     const orderResult = await db.query(
@@ -339,11 +340,14 @@ router.post("/payments/release", authMiddleware, async (req, res) => {
     const order = orderResult.rows[0];
 
     if (order.buyer_id !== req.user.id)
-      return res.status(403).json({ error: "Only the buyer can release funds." });
+      return res
+        .status(403)
+        .json({ error: "Only the buyer can release funds." });
 
     if (order.fonlok_status !== "paid_in_escrow")
       return res.status(409).json({
-        error: "Funds can only be released after payment is confirmed in escrow.",
+        error:
+          "Funds can only be released after payment is confirmed in escrow.",
       });
 
     const release = await releaseFonlokPayment(order.fonlok_invoice_id);
@@ -367,7 +371,10 @@ router.post("/payments/release", authMiddleware, async (req, res) => {
       message: release.message,
     });
   } catch (err) {
-    console.error("[Payments] release error:", err.response?.data || err.message);
+    console.error(
+      "[Payments] release error:",
+      err.response?.data || err.message,
+    );
     return res.status(500).json({ error: "Failed to release payment." });
   }
 });
@@ -394,7 +401,9 @@ router.post("/payments/dispute", authMiddleware, async (req, res) => {
     const order = orderResult.rows[0];
 
     if (order.buyer_id !== req.user.id)
-      return res.status(403).json({ error: "Only the buyer can raise a dispute." });
+      return res
+        .status(403)
+        .json({ error: "Only the buyer can raise a dispute." });
 
     if (order.fonlok_status !== "paid_in_escrow")
       return res.status(409).json({
@@ -415,9 +424,15 @@ router.post("/payments/dispute", authMiddleware, async (req, res) => {
       [order.seller_id, order_id],
     );
 
-    return res.json({ status: "disputed", message: "Dispute raised. Fonlok support will contact both parties." });
+    return res.json({
+      status: "disputed",
+      message: "Dispute raised. Fonlok support will contact both parties.",
+    });
   } catch (err) {
-    console.error("[Payments] dispute error:", err.response?.data || err.message);
+    console.error(
+      "[Payments] dispute error:",
+      err.response?.data || err.message,
+    );
     return res.status(500).json({ error: "Failed to raise dispute." });
   }
 });
