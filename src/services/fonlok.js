@@ -27,7 +27,7 @@ export async function createFonlokInvoice({
   orderId,
   expiresAt,
 }) {
-  const { data } = await client.post("/v1/invoices", {
+  const payload = {
     title,
     amount,
     currency: "XAF",
@@ -37,8 +37,21 @@ export async function createFonlokInvoice({
     description,
     reference: `njimbong-${orderId}`,
     expires_at: expiresAt,
-  });
-  return data; // { id, payment_url, status, ... }
+  };
+  console.log("[Fonlok] createInvoice payload:", JSON.stringify(payload));
+  try {
+    const { data } = await client.post("/v1/invoices", payload);
+    console.log("[Fonlok] createInvoice response:", JSON.stringify(data));
+    return data; // { id, payment_url, status, ... }
+  } catch (err) {
+    console.error(
+      "[Fonlok] createInvoice error status:",
+      err.response?.status,
+      "body:",
+      JSON.stringify(err.response?.data),
+    );
+    throw err;
+  }
 }
 
 /** Trigger a MoMo prompt on the buyer's phone. */

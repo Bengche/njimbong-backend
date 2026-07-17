@@ -59,7 +59,7 @@ router.post(
       // Fetch the listing and both users in one query
       const listingResult = await db.query(
         `SELECT l.id, l.title, l.description, l.price, l.currency, l.userid AS seller_id,
-              l.phone AS seller_phone,
+              s.phone AS seller_phone,
               b.email AS buyer_email,
               s.email AS seller_email
        FROM userlistings l
@@ -118,6 +118,14 @@ router.post(
         Date.now() + 7 * 24 * 60 * 60 * 1000,
       ).toISOString(); // 7 days
 
+      // Normalise seller phone: strip non-digits, ensure 237 prefix
+      const rawSellerDigits = (listing.seller_phone || "").replace(/\D/g, "");
+      const normalisedSellerPhone = rawSellerDigits
+        ? rawSellerDigits.startsWith("237")
+          ? rawSellerDigits
+          : "237" + rawSellerDigits
+        : undefined;
+
       // Step 1 — Create Fonlok escrow invoice
       const invoice = await withRetry(() =>
         createFonlokInvoice({
@@ -125,7 +133,7 @@ router.post(
           amount: Math.round(Number(listing.price)),
           buyerEmail: listing.buyer_email,
           sellerEmail: listing.seller_email,
-          sellerPhone: listing.seller_phone,
+          sellerPhone: normalisedSellerPhone,
           description: `Marketplace purchase: ${listing.title}`,
           orderId,
           expiresAt,
