@@ -1,7 +1,7 @@
 import axios from "axios";
 import crypto from "crypto";
 
-const BASE = "https://fonlok-backend-production.up.railway.app";
+const BASE = "https://api.fonlok.com";
 
 if (!process.env.FONLOK_API_KEY) {
   console.warn("[Fonlok] FONLOK_API_KEY environment variable is not set.");
@@ -21,8 +21,6 @@ export async function createFonlokInvoice({
   title,
   amount,
   buyerEmail,
-  sellerEmail,
-  sellerPhone,
   description,
   orderId,
   expiresAt,
@@ -32,8 +30,6 @@ export async function createFonlokInvoice({
     amount,
     currency: "XAF",
     buyer_email: buyerEmail,
-    seller_email: sellerEmail,
-    seller_phone: sellerPhone,
     description,
     reference: `njimbong-${orderId}`,
     expires_at: expiresAt,

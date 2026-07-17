@@ -48,7 +48,7 @@ router.post(
       ? rawDigits
       : "237" + rawDigits;
 
-    if (!/^237[6789]\d{8}$/.test(normalisedPhone)) {
+    if (!/^237[62]\d{8}$/.test(normalisedPhone)) {
       return res.status(400).json({
         error:
           "Invalid phone number. Must be a Cameroonian MTN or Orange MoMo number.",
@@ -132,8 +132,6 @@ router.post(
           title: listing.title,
           amount: Math.round(Number(listing.price)),
           buyerEmail: listing.buyer_email,
-          sellerEmail: listing.seller_email,
-          sellerPhone: normalisedSellerPhone,
           description: `Marketplace purchase: ${listing.title}`,
           orderId,
           expiresAt,
