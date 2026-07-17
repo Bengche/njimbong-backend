@@ -48,7 +48,7 @@ router.post(
       ? rawDigits
       : "237" + rawDigits;
 
-    if (!/^237[62]\d{8}$/.test(normalisedPhone)) {
+    if (!/^237[6789]\d{8}$/.test(normalisedPhone)) {
       return res.status(400).json({
         error:
           "Invalid phone number. Must be a Cameroonian MTN or Orange MoMo number.",
@@ -66,7 +66,7 @@ router.post(
        JOIN users b ON b.id = $2
        JOIN users s ON s.id = l.userid
        WHERE l.id = $1
-         AND l.status = 'active'
+         AND l.status = 'Available'
          AND l.moderation_status = 'approved'`,
         [listing_id, buyer_id],
       );
