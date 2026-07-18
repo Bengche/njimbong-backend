@@ -154,6 +154,11 @@ router.post(
         .status(400)
         .json({ error: "Please provide a description of the dispute (min 10 chars)." });
     }
+    if (description.trim().length > 1000) {
+      return res
+        .status(400)
+        .json({ error: "Dispute description must not exceed 1000 characters." });
+    }
 
     try {
       // Load order + verify participant
@@ -206,19 +211,24 @@ router.post(
         [id, userId, description.trim(), imageUrls.length ? imageUrls : null],
       );
 
-      // Mark order as disputed if not already
-      if (order.fonlok_status === "paid_in_escrow") {
-        await db.query(
-          `UPDATE orders SET fonlok_status='disputed', updated_at=NOW() WHERE id=$1`,
-          [id],
-        );
-        // Notify via Fonlok
-        try {
-          await disputeFonlokPayment(order.fonlok_invoice_id, description.trim());
-        } catch (fonlokErr) {
-          console.warn("[Dispute] Fonlok dispute call failed:", fonlokErr.message);
-        }
+      // Notify Fonlok BEFORE updating local DB so the fund hold is official.
+      // If fonlok_invoice_id is missing or Fonlok rejects the call, abort so
+      // we don't end up with a locally-disputed order that Fonlok still considers paid.
+      if (!order.fonlok_invoice_id) {
+        return res.status(502).json({ error: "Cannot file dispute: Fonlok invoice ID is missing for this order. Contact support." });
       }
+      try {
+        await disputeFonlokPayment(order.fonlok_invoice_id, description.trim());
+      } catch (fonlokErr) {
+        console.error("[Dispute] Fonlok dispute call failed:", fonlokErr.message);
+        return res.status(502).json({ error: "Failed to register dispute with payment provider. Please try again." });
+      }
+
+      // Fonlok confirmed — now mark locally
+      await db.query(
+        `UPDATE orders SET fonlok_status='disputed', updated_at=NOW() WHERE id=$1`,
+        [id],
+      );
 
       // Determine the other party
       const isFiledByBuyer = order.buyer_id === userId;
