@@ -30,7 +30,11 @@ import homeListings from "./routes/homeListings.js";
 import payments from "./routes/payments.js";
 import fonlokWebhook from "./routes/fonlokWebhook.js";
 import emailVerification from "./routes/emailVerification.js";
+import offers from "./routes/offers.js";
+import orders from "./routes/orders.js";
 import db from "./db.js";
+import { sendListingExpiryWarning, sendListingExpired, sendSavedSearchAlert } from "./utils/email.js";
+import { buildNotificationPayload, sendPushToUser } from "./utils/pushNotifications.js";
 dotenv.config();
 
 const app = express();
@@ -160,6 +164,8 @@ app.use("/api/analytics", analytics);
 app.use("/auth", logout);
 app.use("/home", homeListings);
 app.use("/api", payments);
+app.use("/api", offers);
+app.use("/api", orders);
 
 app.get("/", (req, res) => {
   res.status(200).json({ status: "ok" });
@@ -199,4 +205,165 @@ app.listen(PORT, "0.0.0.0", () => {
   ).catch((err) =>
     console.warn("seller_email migration skipped:", err.message),
   );
+
+  // ─── Listing expiry cron (runs daily at 03:00) ────────────────────────────
+  const runListingExpiry = async () => {
+    try {
+      // 1. Send 7-day warning for listings that will expire in exactly 7 days
+      const warnResult = await db.query(
+        `SELECT l.id, l.title, l.price, l.currency,
+                u.name, u.email, u.id AS user_id
+         FROM userlistings l
+         JOIN users u ON u.id = l.userid
+         WHERE l.status = 'Available'
+           AND l.moderation_status = 'approved'
+           AND l.createdat::date = (NOW() - INTERVAL '53 days')::date
+           AND NOT EXISTS (
+             SELECT 1 FROM orders WHERE listing_id = l.id
+             AND fonlok_status IN ('pending','paid_in_escrow','released')
+           )`,
+      );
+      for (const row of warnResult.rows) {
+        sendListingExpiryWarning({ name: row.name, email: row.email }, row).catch(() => {});
+        sendPushToUser(row.user_id, buildNotificationPayload('listing_expiry_warning', {
+          title: 'Listing expiring soon',
+          body: `Your listing "${row.title}" will expire in 7 days. Renew it now.`,
+          url: '/dashboard',
+        }));
+      }
+
+      // 2. Expire listings older than 60 days
+      const expiredResult = await db.query(
+        `UPDATE userlistings
+         SET status = 'Expired', updatedat = NOW()
+         WHERE status = 'Available'
+           AND moderation_status = 'approved'
+           AND createdat < NOW() - INTERVAL '60 days'
+           AND NOT EXISTS (
+             SELECT 1 FROM orders WHERE listing_id = userlistings.id
+             AND fonlok_status IN ('pending','paid_in_escrow')
+           )
+         RETURNING id, title, price, currency, userid`,
+      );
+      for (const row of expiredResult.rows) {
+        const userRes = await db.query(
+          `SELECT name, email FROM users WHERE id=$1`, [row.userid],
+        );
+        if (userRes.rows.length) {
+          const user = userRes.rows[0];
+          sendListingExpired(user, row).catch(() => {});
+          sendPushToUser(row.userid, buildNotificationPayload('listing_expired', {
+            title: 'Listing expired',
+            body: `Your listing "${row.title}" has expired. Renew it to relist.`,
+            url: '/dashboard',
+          }));
+        }
+      }
+      if (expiredResult.rowCount > 0) {
+        console.log(`[Expiry] Expired ${expiredResult.rowCount} listings.`);
+      }
+    } catch (err) {
+      console.error('[Expiry] Cron error:', err.message);
+    }
+  };
+
+  // ─── Saved search alert cron (runs every 2 hours) ─────────────────────────
+  const runSavedSearchAlerts = async () => {
+    try {
+      // Get all saved searches with notifications enabled
+      const searchesRes = await db.query(
+        `SELECT ss.id, ss.user_id, ss.name, ss.filters,
+                u.email, u.name AS user_name
+         FROM saved_searches ss
+         JOIN users u ON u.id = ss.user_id
+         WHERE ss.notify_new_listings = true`,
+      ).catch(() => ({ rows: [] }));
+
+      for (const search of searchesRes.rows) {
+        const f = search.filters;
+        const params = [];
+        let where = `l.moderation_status = 'approved' AND l.status = 'Available'
+                     AND l.createdat > NOW() - INTERVAL '2 hours'`;
+        let idx = 1;
+        if (f.search && f.search.trim()) {
+          where += ` AND (LOWER(l.title) LIKE LOWER($${idx}) OR LOWER(l.description) LIKE LOWER($${idx}))`;
+          params.push(`%${f.search.trim()}%`);
+          idx++;
+        }
+        if (f.category && f.category.trim()) {
+          where += ` AND l.categoryid = $${idx}`;
+          params.push(f.category);
+          idx++;
+        }
+        if (f.country && f.country.trim()) {
+          where += ` AND LOWER(l.country) = LOWER($${idx})`;
+          params.push(f.country);
+          idx++;
+        }
+        if (f.city && f.city.trim()) {
+          where += ` AND LOWER(l.city) = LOWER($${idx})`;
+          params.push(f.city);
+          idx++;
+        }
+        if (f.minPrice && f.minPrice.trim()) {
+          where += ` AND l.price >= $${idx}`;
+          params.push(parseFloat(f.minPrice));
+          idx++;
+        }
+        if (f.maxPrice && f.maxPrice.trim()) {
+          where += ` AND l.price <= $${idx}`;
+          params.push(parseFloat(f.maxPrice));
+          idx++;
+        }
+        if (f.condition && f.condition.trim()) {
+          where += ` AND l.condition = $${idx}`;
+          params.push(f.condition);
+          idx++;
+        }
+
+        const matches = await db.query(
+          `SELECT l.id, l.title, l.price, l.currency, l.city, l.country
+           FROM userlistings l
+           WHERE ${where}
+           ORDER BY l.createdat DESC
+           LIMIT 10`,
+          params,
+        ).then(r => r.rows).catch(() => []);
+
+        if (matches.length > 0) {
+          sendSavedSearchAlert(
+            { name: search.user_name, email: search.email },
+            search.name,
+            matches,
+          ).catch(() => {});
+          sendPushToUser(
+            search.user_id,
+            buildNotificationPayload('saved_search_alert', {
+              title: `${matches.length} new listing${matches.length > 1 ? 's' : ''} for "${search.name}"`,
+              body: `New matches found for your saved search.`,
+              url: '/market',
+            }),
+          );
+        }
+      }
+    } catch (err) {
+      console.error('[SavedSearchAlerts] Cron error:', err.message);
+    }
+  };
+
+  // Schedule: expiry at 03:00 daily, saved search alerts every 2 hours
+  const scheduleDaily = (fn, targetHour) => {
+    const now = new Date();
+    const next = new Date();
+    next.setHours(targetHour, 0, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    setTimeout(() => {
+      fn();
+      setInterval(fn, 24 * 60 * 60 * 1000);
+    }, next.getTime() - now.getTime());
+  };
+  scheduleDaily(runListingExpiry, 3);
+  setInterval(runSavedSearchAlerts, 2 * 60 * 60 * 1000);
+  // Run once at startup after 30s (to avoid blocking boot)
+  setTimeout(runSavedSearchAlerts, 30 * 1000);
 });

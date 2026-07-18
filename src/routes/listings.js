@@ -351,7 +351,9 @@ router.get("/listings", authMiddleware, async (req, res) => {
       }),
     );
 
-    res.status(200).json(listingsWithImages);
+    // Strip seller_email from all public listing responses — never expose to clients
+    const safe = listingsWithImages.map(({ seller_email, ...rest }) => rest);
+    res.status(200).json(safe);
   } catch (error) {
     console.error("Error fetching listings:", error.message);
     console.error("Error details:", error);
@@ -385,7 +387,8 @@ router.get("/listings/:id", authMiddleware, async (req, res) => {
       return res.status(404).json({ error: "Listing not found" });
     }
 
-    const listing = listingResult.rows[0];
+    // Strip seller_email — never expose to clients
+    const { seller_email, ...safeListing } = listingResult.rows[0];
 
     // Fetch images for the listing
     const imagesResult = await db.query(
@@ -396,7 +399,7 @@ router.get("/listings/:id", authMiddleware, async (req, res) => {
     );
 
     res.status(200).json({
-      ...listing,
+      ...safeListing,
       images: imagesResult.rows,
     });
   } catch (error) {
@@ -569,4 +572,43 @@ router.put("/listings/:id/mark-available", authMiddleware, async (req, res) => {
   }
 });
 
+// Renew an expired listing (owner only) — resets createdat, re-queues for moderation
+router.put("/listings/:id/renew", authMiddleware, blockIfSuspended, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const listingCheck = await db.query(
+      "SELECT id, userid, status, title FROM userlistings WHERE id = $1",
+      [id],
+    );
+    if (listingCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Listing not found" });
+    }
+    const listing = listingCheck.rows[0];
+    if (listing.userid !== userId) {
+      return res.status(403).json({ error: "You can only renew your own listings" });
+    }
+    if (listing.status !== "Expired") {
+      return res.status(400).json({ error: "Only expired listings can be renewed" });
+    }
+
+    const result = await db.query(
+      `UPDATE userlistings
+       SET status = 'Available', moderation_status = 'pending', createdat = NOW(), updatedat = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [id],
+    );
+    res.status(200).json({
+      message: "Listing renewed and resubmitted for review",
+      listing: result.rows[0],
+    });
+  } catch (error) {
+    console.error("Error renewing listing:", error);
+    res.status(500).json({ error: "Failed to renew listing" });
+  }
+});
+
 export default router;
+
