@@ -139,6 +139,3 @@ export function verifyFonlokWebhook(rawBody, signatureHeader) {
     return false; // buffers of different lengths
   }
 }
-    return false; // buffers of different lengths
-  }
-}
