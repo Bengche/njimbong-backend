@@ -953,7 +953,9 @@ router.put(
       }
       const listing = listingRes.rows[0];
       if (listing.userid !== userId) {
-        return res.status(403).json({ error: "You can only edit your own listings." });
+        return res
+          .status(403)
+          .json({ error: "You can only edit your own listings." });
       }
 
       // Block edit when funds are or were held in escrow
@@ -991,7 +993,10 @@ router.put(
       if (!title || !description || !price || !categoryId || !city) {
         return res
           .status(400)
-          .json({ error: "Title, description, price, category, and city are required." });
+          .json({
+            error:
+              "Title, description, price, category, and city are required.",
+          });
       }
 
       // Delete removed existing images
@@ -1035,7 +1040,10 @@ router.put(
             );
             currentCount++;
           } catch (uploadErr) {
-            console.warn("[Listings] Edit image upload failed:", uploadErr.message);
+            console.warn(
+              "[Listings] Edit image upload failed:",
+              uploadErr.message,
+            );
           }
         }
       }
@@ -1052,7 +1060,9 @@ router.put(
 
       // Editing an approved listing requires re-review
       const newModerationStatus =
-        listing.moderation_status === "approved" ? "pending" : listing.moderation_status;
+        listing.moderation_status === "approved"
+          ? "pending"
+          : listing.moderation_status;
 
       const result = await db.query(
         `UPDATE userlistings
@@ -1117,7 +1127,9 @@ router.delete("/listings/:id", authMiddleware, async (req, res) => {
       return res.status(404).json({ error: "Listing not found." });
     }
     if (listingRes.rows[0].userid !== userId) {
-      return res.status(403).json({ error: "You can only delete your own listings." });
+      return res
+        .status(403)
+        .json({ error: "You can only delete your own listings." });
     }
 
     const activeOrder = await db.query(
@@ -1129,7 +1141,8 @@ router.delete("/listings/:id", authMiddleware, async (req, res) => {
     );
     if (activeOrder.rows.length > 0) {
       return res.status(409).json({
-        error: "This listing has an active or completed escrow order and cannot be deleted.",
+        error:
+          "This listing has an active or completed escrow order and cannot be deleted.",
       });
     }
 

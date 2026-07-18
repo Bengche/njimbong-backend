@@ -403,7 +403,9 @@ app.listen(PORT, "0.0.0.0", () => {
          RETURNING id`,
       );
       if (stale.rowCount > 0) {
-        console.log(`[StaleOrders] Cleaned up ${stale.rowCount} stale order(s).`);
+        console.log(
+          `[StaleOrders] Cleaned up ${stale.rowCount} stale order(s).`,
+        );
       }
     } catch (err) {
       console.error("[StaleOrders] Cron error:", err.message);

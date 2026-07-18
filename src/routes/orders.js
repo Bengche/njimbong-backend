@@ -152,12 +152,16 @@ router.post(
     if (!description || description.trim().length < 10) {
       return res
         .status(400)
-        .json({ error: "Please provide a description of the dispute (min 10 chars)." });
+        .json({
+          error: "Please provide a description of the dispute (min 10 chars).",
+        });
     }
     if (description.trim().length > 1000) {
       return res
         .status(400)
-        .json({ error: "Dispute description must not exceed 1000 characters." });
+        .json({
+          error: "Dispute description must not exceed 1000 characters.",
+        });
     }
 
     try {
@@ -173,16 +177,22 @@ router.post(
          WHERE o.id = $1`,
         [id],
       );
-      if (orderRes.rows.length === 0) return res.status(404).json({ error: "Order not found." });
+      if (orderRes.rows.length === 0)
+        return res.status(404).json({ error: "Order not found." });
       const order = orderRes.rows[0];
 
       if (order.buyer_id !== userId && order.seller_id !== userId) {
-        return res.status(403).json({ error: "You are not a party to this order." });
+        return res
+          .status(403)
+          .json({ error: "You are not a party to this order." });
       }
       if (order.fonlok_status !== "paid_in_escrow") {
         return res
           .status(409)
-          .json({ error: "Disputes can only be filed for orders with funds actively held in escrow." });
+          .json({
+            error:
+              "Disputes can only be filed for orders with funds actively held in escrow.",
+          });
       }
 
       // Upload evidence images to Cloudinary
@@ -215,13 +225,26 @@ router.post(
       // If fonlok_invoice_id is missing or Fonlok rejects the call, abort so
       // we don't end up with a locally-disputed order that Fonlok still considers paid.
       if (!order.fonlok_invoice_id) {
-        return res.status(502).json({ error: "Cannot file dispute: Fonlok invoice ID is missing for this order. Contact support." });
+        return res
+          .status(502)
+          .json({
+            error:
+              "Cannot file dispute: Fonlok invoice ID is missing for this order. Contact support.",
+          });
       }
       try {
         await disputeFonlokPayment(order.fonlok_invoice_id, description.trim());
       } catch (fonlokErr) {
-        console.error("[Dispute] Fonlok dispute call failed:", fonlokErr.message);
-        return res.status(502).json({ error: "Failed to register dispute with payment provider. Please try again." });
+        console.error(
+          "[Dispute] Fonlok dispute call failed:",
+          fonlokErr.message,
+        );
+        return res
+          .status(502)
+          .json({
+            error:
+              "Failed to register dispute with payment provider. Please try again.",
+          });
       }
 
       // Fonlok confirmed — now mark locally
@@ -232,8 +255,10 @@ router.post(
 
       // Determine the other party
       const isFiledByBuyer = order.buyer_id === userId;
-      const filerName  = isFiledByBuyer ? order.buyer_name  : order.seller_name;
-      const filerEmail = isFiledByBuyer ? order.buyer_email : order.seller_email;
+      const filerName = isFiledByBuyer ? order.buyer_name : order.seller_name;
+      const filerEmail = isFiledByBuyer
+        ? order.buyer_email
+        : order.seller_email;
       const otherPartyId = isFiledByBuyer ? order.seller_id : order.buyer_id;
 
       // Notify the other party via push
@@ -270,7 +295,12 @@ router.post(
         order.order_reference,
       );
 
-      res.status(201).json({ message: "Dispute filed successfully. Our team will review within 24-48 hours." });
+      res
+        .status(201)
+        .json({
+          message:
+            "Dispute filed successfully. Our team will review within 24-48 hours.",
+        });
     } catch (err) {
       console.error("[Dispute] POST error:", err.message);
       res.status(500).json({ error: "Failed to file dispute." });

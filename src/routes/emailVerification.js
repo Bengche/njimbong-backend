@@ -42,12 +42,10 @@ router.get("/verify-email", async (req, res) => {
     }
 
     if (new Date(row.expires_at) < new Date()) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "This verification link has expired.",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "This verification link has expired.",
+      });
     }
 
     // Mark token as used and user as verified in a single transaction
@@ -83,10 +81,14 @@ router.get("/verify-email", async (req, res) => {
 router.post("/forgot-password", async (req, res) => {
   const { email } = req.body;
   if (!email || typeof email !== "string" || email.length > 255) {
-    return res.status(400).json({ error: "A valid email address is required." });
+    return res
+      .status(400)
+      .json({ error: "A valid email address is required." });
   }
   // Always return the same generic response to prevent email enumeration
-  const ok = { message: "If that email is registered, a reset link has been sent." };
+  const ok = {
+    message: "If that email is registered, a reset link has been sent.",
+  };
 
   try {
     await db.query(`
@@ -135,7 +137,9 @@ router.post("/reset-password", async (req, res) => {
     return res.status(400).json({ error: "New password is required." });
   }
   if (newPassword.length < 8) {
-    return res.status(400).json({ error: "Password must be at least 8 characters." });
+    return res
+      .status(400)
+      .json({ error: "Password must be at least 8 characters." });
   }
   if (newPassword.length > 128) {
     return res.status(400).json({ error: "Password is too long." });
@@ -165,20 +169,35 @@ router.post("/reset-password", async (req, res) => {
     }
     const row = result.rows[0];
     if (row.used_at) {
-      return res.status(400).json({ error: "This link has already been used." });
+      return res
+        .status(400)
+        .json({ error: "This link has already been used." });
     }
     if (new Date(row.expires_at) < new Date()) {
-      return res.status(400).json({ error: "This reset link has expired. Please request a new one." });
+      return res
+        .status(400)
+        .json({
+          error: "This reset link has expired. Please request a new one.",
+        });
     }
 
     const hash = await bcrypt.hash(newPassword, 12);
 
     await db.query("BEGIN");
-    await db.query("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1", [row.id]);
-    await db.query("UPDATE users SET passwordhash = $1, updatedat = NOW() WHERE id = $2", [hash, row.user_id]);
+    await db.query(
+      "UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1",
+      [row.id],
+    );
+    await db.query(
+      "UPDATE users SET passwordhash = $1, updatedat = NOW() WHERE id = $2",
+      [hash, row.user_id],
+    );
     await db.query("COMMIT");
 
-    return res.json({ message: "Password reset successfully. You can now log in with your new password." });
+    return res.json({
+      message:
+        "Password reset successfully. You can now log in with your new password.",
+    });
   } catch (err) {
     await db.query("ROLLBACK").catch(() => {});
     console.error("[Auth] reset-password error:", err.message);

@@ -186,10 +186,16 @@ router.put("/offers/:id", authMiddleware, async (req, res) => {
   // Seller actions: 'accept' | 'decline' | 'counter'
   // Buyer actions:  'accept_counter' | 'decline_counter'
 
-  if (!["accept", "decline", "counter", "accept_counter", "decline_counter"].includes(action)) {
-    return res
-      .status(400)
-      .json({ error: "Invalid action." });
+  if (
+    ![
+      "accept",
+      "decline",
+      "counter",
+      "accept_counter",
+      "decline_counter",
+    ].includes(action)
+  ) {
+    return res.status(400).json({ error: "Invalid action." });
   }
 
   try {
@@ -211,15 +217,20 @@ router.put("/offers/:id", authMiddleware, async (req, res) => {
     // ── Buyer responding to counter ──────────────────────────────────────────
     if (action === "accept_counter" || action === "decline_counter") {
       if (offer.buyer_id !== userId) {
-        return res.status(403).json({ error: "Only the buyer can respond to a counter-offer." });
+        return res
+          .status(403)
+          .json({ error: "Only the buyer can respond to a counter-offer." });
       }
       if (offer.status !== "countered") {
-        return res.status(409).json({ error: "Offer is not in a countered state." });
+        return res
+          .status(409)
+          .json({ error: "Offer is not in a countered state." });
       }
 
       const newStatus = action === "accept_counter" ? "accepted" : "declined";
       // When accepting a counter, the accepted amount becomes the counter_amount
-      const acceptedAmount = action === "accept_counter" ? offer.counter_amount : offer.amount;
+      const acceptedAmount =
+        action === "accept_counter" ? offer.counter_amount : offer.amount;
 
       await db.query(
         `UPDATE offers SET status=$1, amount=$2, updated_at=NOW() WHERE id=$3`,
@@ -239,7 +250,11 @@ router.put("/offers/:id", authMiddleware, async (req, res) => {
         await db.query(
           `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
            VALUES ($1, 'Counter-offer accepted', $2, 'offer', $3, 'listing')`,
-          [offer.seller_id, `Buyer accepted your counter-offer on "${offer.title}" for ${Number(acceptedAmount).toLocaleString()} ${offer.currency}.`, offer.listing_id],
+          [
+            offer.seller_id,
+            `Buyer accepted your counter-offer on "${offer.title}" for ${Number(acceptedAmount).toLocaleString()} ${offer.currency}.`,
+            offer.listing_id,
+          ],
         );
       }
 
