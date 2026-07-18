@@ -154,22 +154,26 @@ router.get("/dashboard", authMiddleware, async (req, res) => {
       [userId]
     );
 
-    // Get revenue from sold items
+    // Revenue earned as seller — Fonlok-confirmed releases only
+    // Seller receives 97% of the gross amount (3% Fonlok platform fee)
     const revenueResult = await db.query(
-      `
-      SELECT COALESCE(SUM(price), 0) as total_revenue, currency
-      FROM userlistings 
-      WHERE userid = $1 AND status = 'Sold'
-      GROUP BY currency
-    `,
+      `SELECT COALESCE(SUM(amount), 0) AS gross
+       FROM orders
+       WHERE seller_id = $1 AND fonlok_status = 'released'`,
       [userId]
     );
+    const gross = parseFloat(revenueResult.rows[0]?.gross) || 0;
+    const totalRevenue = Math.round(gross * 0.97);
 
-    // Calculate total revenue (simplified - just sum all currencies)
-    let totalRevenue = 0;
-    revenueResult.rows.forEach((row) => {
-      totalRevenue += parseFloat(row.total_revenue) || 0;
-    });
+    // Money spent as buyer — Fonlok-confirmed purchases (gross paid by buyer)
+    const spentResult = await db.query(
+      `SELECT COALESCE(SUM(amount), 0) AS total
+       FROM orders
+       WHERE buyer_id = $1 AND fonlok_status = 'released'`,
+      [userId]
+    );
+    const totalSpent = Math.round(parseFloat(spentResult.rows[0]?.total) || 0);
+    const netGain = totalRevenue - totalSpent;
 
     // Get 7-day performance data
     const last7Days = await db.query(
@@ -311,6 +315,8 @@ router.get("/dashboard", authMiddleware, async (req, res) => {
         totalListings: parseInt(totalStats.rows[0]?.total_listings) || 0,
         activeListings: parseInt(activeListings.rows[0]?.count) || 0,
         totalRevenue: totalRevenue,
+        totalSpent: totalSpent,
+        netGain: netGain,
       },
       trends: {
         views: viewsTrend,
