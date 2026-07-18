@@ -878,19 +878,6 @@ export async function sendNewListingFromFollowed(user, seller, listing) {
     html,
   });
 }
-    <p style="text-align:center;margin:28px 0;">
-      <a href="${renewLink}" class="btn">Renew Listing Now</a>
-    </p>
-    <hr class="divider"/>
-    <p class="meta">Renewal is free. Your listing will go back through standard moderation review.</p>
-  `,
-  );
-  await send({
-    to: user.email,
-    subject: `Your listing "${listing.title}" has expired — renew to relist`,
-    html,
-  });
-}
 
 // ─── 22. Dispute filed — notify both parties + admin ─────────────────────────
 
