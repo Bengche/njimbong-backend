@@ -264,7 +264,10 @@ router.post(
             );
           }
         } catch (followerErr) {
-          console.warn("[Listings] Follower notify error:", followerErr.message);
+          console.warn(
+            "[Listings] Follower notify error:",
+            followerErr.message,
+          );
         }
       }
 
@@ -327,6 +330,7 @@ router.get("/my-listings", authMiddleware, async (req, res) => {
 
 // Get all listings with images and filters
 router.get("/listings", authMiddleware, async (req, res) => {
+  await ensureListingColumns();
   try {
     const {
       category,
@@ -441,10 +445,10 @@ router.get("/listings", authMiddleware, async (req, res) => {
     // Log search term asynchronously (fire-and-forget)
     if (search && search.trim().length >= 2) {
       const userId = req.user?.id || null;
-      db.query(
-        `INSERT INTO search_logs (user_id, query) VALUES ($1, $2)`,
-        [userId, search.trim().toLowerCase()],
-      ).catch(() => {});
+      db.query(`INSERT INTO search_logs (user_id, query) VALUES ($1, $2)`, [
+        userId,
+        search.trim().toLowerCase(),
+      ]).catch(() => {});
     }
 
     res.status(200).json(safe);
@@ -853,9 +857,7 @@ router.put(
           .status(403)
           .json({ error: "You can only publish your own listings" });
       if (!listing.is_draft)
-        return res
-          .status(400)
-          .json({ error: "Listing is not a draft." });
+        return res.status(400).json({ error: "Listing is not a draft." });
 
       const result = await db.query(
         `UPDATE userlistings
@@ -898,11 +900,17 @@ router.put(
             );
           }
         } catch (followerErr) {
-          console.warn("[Listings] Publish follower notify error:", followerErr.message);
+          console.warn(
+            "[Listings] Publish follower notify error:",
+            followerErr.message,
+          );
         }
       }
 
-      res.json({ message: "Listing submitted for review.", listing: result.rows[0] });
+      res.json({
+        message: "Listing submitted for review.",
+        listing: result.rows[0],
+      });
     } catch (error) {
       console.error("Error publishing listing:", error);
       res.status(500).json({ error: "Failed to publish listing" });
