@@ -116,8 +116,8 @@ export function verifyFonlokWebhook(rawBody, signatureHeader) {
     // HMAC-SHA256 verification and prevent spoofed events.
     console.warn(
       "[Fonlok] FONLOK_WEBHOOK_SECRET is not set. " +
-      "Webhook signature verification is DISABLED. " +
-      "Set this variable in Railway to enable security.",
+        "Webhook signature verification is DISABLED. " +
+        "Set this variable in Railway to enable security.",
     );
     return true;
   }

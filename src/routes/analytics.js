@@ -13,7 +13,7 @@ router.post("/track/view", authMiddleware, async (req, res) => {
     // Don't track if user views their own listing
     const listingCheck = await db.query(
       "SELECT userid FROM userlistings WHERE id = $1",
-      [listingId]
+      [listingId],
     );
 
     if (listingCheck.rows.length === 0) {
@@ -36,7 +36,7 @@ router.post("/track/view", authMiddleware, async (req, res) => {
         last_viewed_at = NOW(),
         updated_at = NOW()
     `,
-      [listingId]
+      [listingId],
     );
 
     // Record detailed event
@@ -45,7 +45,7 @@ router.post("/track/view", authMiddleware, async (req, res) => {
       INSERT INTO analytics_events (listing_id, user_id, event_type, source, created_at)
       VALUES ($1, $2, 'view', $3, NOW())
     `,
-      [listingId, isOwnView ? null : viewerId, source || "direct"]
+      [listingId, isOwnView ? null : viewerId, source || "direct"],
     );
 
     // Update daily aggregates for the listing owner
@@ -59,14 +59,14 @@ router.post("/track/view", authMiddleware, async (req, res) => {
       DO UPDATE SET 
         total_views = user_analytics_daily.total_views + 1,
         source_${source || "direct"} = user_analytics_daily.source_${
-        source || "direct"
-      } + 1
+          source || "direct"
+        } + 1
     `
         .replace(/source_direct/g, "source_direct")
         .replace(/source_search/g, "source_search")
         .replace(/source_browse/g, "source_browse")
         .replace(/source_external/g, "source_external"),
-      [ownerId]
+      [ownerId],
     );
 
     res.json({ success: true });
@@ -85,7 +85,7 @@ router.post("/track/click", authMiddleware, async (req, res) => {
   try {
     const listingCheck = await db.query(
       "SELECT userid FROM userlistings WHERE id = $1",
-      [listingId]
+      [listingId],
     );
 
     if (listingCheck.rows.length === 0) {
@@ -104,7 +104,7 @@ router.post("/track/click", authMiddleware, async (req, res) => {
         clicks = listing_analytics.clicks + 1,
         updated_at = NOW()
     `,
-      [listingId]
+      [listingId],
     );
 
     // Record detailed event
@@ -113,7 +113,7 @@ router.post("/track/click", authMiddleware, async (req, res) => {
       INSERT INTO analytics_events (listing_id, user_id, event_type, source, created_at)
       VALUES ($1, $2, $3, $4, NOW())
     `,
-      [listingId, clickerId, clickType || "click", source || "direct"]
+      [listingId, clickerId, clickType || "click", source || "direct"],
     );
 
     // Update daily aggregates
@@ -125,7 +125,7 @@ router.post("/track/click", authMiddleware, async (req, res) => {
       DO UPDATE SET 
         total_clicks = user_analytics_daily.total_clicks + 1
     `,
-      [ownerId]
+      [ownerId],
     );
 
     res.json({ success: true });
@@ -151,7 +151,7 @@ router.get("/dashboard", authMiddleware, async (req, res) => {
       LEFT JOIN listing_analytics la ON ul.id = la.listing_id
       WHERE ul.userid = $1
     `,
-      [userId]
+      [userId],
     );
 
     // Revenue earned as seller — Fonlok-confirmed releases only
@@ -160,7 +160,7 @@ router.get("/dashboard", authMiddleware, async (req, res) => {
       `SELECT COALESCE(SUM(amount), 0) AS gross
        FROM orders
        WHERE seller_id = $1 AND fonlok_status = 'released'`,
-      [userId]
+      [userId],
     );
     const gross = parseFloat(revenueResult.rows[0]?.gross) || 0;
     const totalRevenue = Math.round(gross * 0.97);
@@ -170,7 +170,7 @@ router.get("/dashboard", authMiddleware, async (req, res) => {
       `SELECT COALESCE(SUM(amount), 0) AS total
        FROM orders
        WHERE buyer_id = $1 AND fonlok_status = 'released'`,
-      [userId]
+      [userId],
     );
     const totalSpent = Math.round(parseFloat(spentResult.rows[0]?.total) || 0);
     const netGain = totalRevenue - totalSpent;
@@ -190,7 +190,7 @@ router.get("/dashboard", authMiddleware, async (req, res) => {
       WHERE user_id = $1 AND date >= CURRENT_DATE - INTERVAL '7 days'
       ORDER BY date ASC
     `,
-      [userId]
+      [userId],
     );
 
     // Fill in missing days with zeros
@@ -201,7 +201,7 @@ router.get("/dashboard", authMiddleware, async (req, res) => {
       const dateStr = date.toISOString().split("T")[0];
 
       const dayData = last7Days.rows.find(
-        (d) => new Date(d.date).toISOString().split("T")[0] === dateStr
+        (d) => new Date(d.date).toISOString().split("T")[0] === dateStr,
       );
 
       performanceData.push({
@@ -223,7 +223,7 @@ router.get("/dashboard", authMiddleware, async (req, res) => {
       FROM user_analytics_daily
       WHERE user_id = $1 AND date >= CURRENT_DATE - INTERVAL '30 days'
     `,
-      [userId]
+      [userId],
     );
 
     // Get week-over-week trends
@@ -235,7 +235,7 @@ router.get("/dashboard", authMiddleware, async (req, res) => {
       FROM user_analytics_daily
       WHERE user_id = $1 AND date >= CURRENT_DATE - INTERVAL '7 days'
     `,
-      [userId]
+      [userId],
     );
 
     const lastWeek = await db.query(
@@ -248,7 +248,7 @@ router.get("/dashboard", authMiddleware, async (req, res) => {
         AND date >= CURRENT_DATE - INTERVAL '14 days'
         AND date < CURRENT_DATE - INTERVAL '7 days'
     `,
-      [userId]
+      [userId],
     );
 
     const thisWeekViews = parseInt(thisWeek.rows[0]?.views) || 0;
@@ -260,15 +260,15 @@ router.get("/dashboard", authMiddleware, async (req, res) => {
       lastWeekViews > 0
         ? Math.round(((thisWeekViews - lastWeekViews) / lastWeekViews) * 100)
         : thisWeekViews > 0
-        ? 100
-        : 0;
+          ? 100
+          : 0;
 
     const clicksTrend =
       lastWeekClicks > 0
         ? Math.round(((thisWeekClicks - lastWeekClicks) / lastWeekClicks) * 100)
         : thisWeekClicks > 0
-        ? 100
-        : 0;
+          ? 100
+          : 0;
 
     // Get top performing listings
     const topListings = await db.query(
@@ -289,7 +289,7 @@ router.get("/dashboard", authMiddleware, async (req, res) => {
       ORDER BY COALESCE(la.views, 0) DESC
       LIMIT 5
     `,
-      [userId]
+      [userId],
     );
 
     // Get active listings count
@@ -298,7 +298,7 @@ router.get("/dashboard", authMiddleware, async (req, res) => {
       SELECT COUNT(*) as count FROM userlistings 
       WHERE userid = $1 AND status = 'Available' AND moderation_status = 'approved'
     `,
-      [userId]
+      [userId],
     );
 
     // Calculate CTR
@@ -406,7 +406,7 @@ router.get("/top-sellers", async (req, res) => {
         ORDER BY hotness_score DESC, l.createdat DESC
         LIMIT $2
       `,
-        [category.id, parseInt(limit)]
+        [category.id, parseInt(limit)],
       );
 
       if (topListings.rows.length > 0) {
@@ -489,7 +489,7 @@ router.get("/trending", async (req, res) => {
       ORDER BY trending_score DESC, l.createdat DESC
       LIMIT $1
     `,
-      [parseInt(limit)]
+      [parseInt(limit)],
     );
 
     res.json({
