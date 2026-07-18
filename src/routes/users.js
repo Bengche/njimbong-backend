@@ -4,6 +4,10 @@ import bcrypt from "bcrypt";
 import multer from "multer";
 import cloudinary from "../storage/cloudinary.js";
 import authMiddleware from "../Middleware/authMiddleware.js";
+import {
+  buildNotificationPayload,
+  sendPushToUser,
+} from "../utils/pushNotifications.js";
 
 const router = express.Router();
 
@@ -361,6 +365,80 @@ router.put("/users/:id/password", authMiddleware, async (req, res) => {
   } catch (error) {
     console.error("Error updating password:", error);
     res.status(500).json({ error: "Failed to update password" });
+  }
+});
+
+// ─── Follow / Unfollow a seller ──────────────────────────────────────────────
+
+const ensureFollowersTable = async () => {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS seller_followers (
+      follower_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      seller_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at  TIMESTAMP DEFAULT NOW(),
+      PRIMARY KEY (follower_id, seller_id)
+    )
+  `);
+};
+
+// GET /api/users/:id/follow-status
+router.get("/users/:id/follow-status", authMiddleware, async (req, res) => {
+  await ensureFollowersTable();
+  const followerId = req.user.id;
+  const sellerId = parseInt(req.params.id);
+  if (followerId === sellerId) return res.json({ following: false });
+  try {
+    const r = await db.query(
+      `SELECT 1 FROM seller_followers WHERE follower_id=$1 AND seller_id=$2`,
+      [followerId, sellerId],
+    );
+    res.json({ following: r.rows.length > 0 });
+  } catch (err) {
+    res.json({ following: false });
+  }
+});
+
+// POST /api/users/:id/follow
+router.post("/users/:id/follow", authMiddleware, async (req, res) => {
+  await ensureFollowersTable();
+  const followerId = req.user.id;
+  const sellerId = parseInt(req.params.id);
+  if (followerId === sellerId)
+    return res.status(400).json({ error: "Cannot follow yourself." });
+  try {
+    await db.query(
+      `INSERT INTO seller_followers (follower_id, seller_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [followerId, sellerId],
+    );
+    // Notify the seller
+    sendPushToUser(
+      sellerId,
+      buildNotificationPayload("new_follower", {
+        title: "Someone followed you",
+        body: "A buyer is now following your listings and will be notified when you post.",
+        url: `/profile/${sellerId}`,
+      }),
+    );
+    res.json({ following: true });
+  } catch (err) {
+    console.error("[Follow] POST error:", err.message);
+    res.status(500).json({ error: "Failed to follow." });
+  }
+});
+
+// DELETE /api/users/:id/follow
+router.delete("/users/:id/follow", authMiddleware, async (req, res) => {
+  const followerId = req.user.id;
+  const sellerId = parseInt(req.params.id);
+  try {
+    await db.query(
+      `DELETE FROM seller_followers WHERE follower_id=$1 AND seller_id=$2`,
+      [followerId, sellerId],
+    );
+    res.json({ following: false });
+  } catch (err) {
+    console.error("[Follow] DELETE error:", err.message);
+    res.status(500).json({ error: "Failed to unfollow." });
   }
 });
 

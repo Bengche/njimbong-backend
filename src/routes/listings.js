@@ -4,9 +4,52 @@ import cloudinary from "../storage/cloudinary.js";
 import multer from "multer";
 import authMiddleware from "../Middleware/authMiddleware.js";
 import { blockIfSuspended } from "../Middleware/suspensionMiddleware.js";
-import { sendListingSubmittedAdmin } from "../utils/email.js";
+import {
+  sendListingSubmittedAdmin,
+  sendPriceDropAlert,
+  sendNewListingFromFollowed,
+} from "../utils/email.js";
+import {
+  buildNotificationPayload,
+  sendPushToUser,
+} from "../utils/pushNotifications.js";
 
 const router = express.Router();
+
+// ─── One-time DB setup ────────────────────────────────────────────────────────
+let _colsEnsured = false;
+const ensureListingColumns = async () => {
+  if (_colsEnsured) return;
+  await db.query(
+    `ALTER TABLE userlistings ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0`,
+  );
+  await db.query(
+    `ALTER TABLE userlistings ADD COLUMN IF NOT EXISTS is_draft BOOLEAN DEFAULT FALSE`,
+  );
+  await db.query(
+    `ALTER TABLE userlistings ADD COLUMN IF NOT EXISTS delivery_type VARCHAR(20) DEFAULT 'pickup'`,
+  );
+  await db.query(
+    `ALTER TABLE userlistings ADD COLUMN IF NOT EXISTS delivery_notes TEXT`,
+  );
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS search_logs (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      query      TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS seller_followers (
+      follower_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      seller_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at  TIMESTAMP DEFAULT NOW(),
+      PRIMARY KEY (follower_id, seller_id)
+    )
+  `);
+  _colsEnsured = true;
+};
 
 const getUserSuspensionSelect = async () => {
   const result = await db.query(
@@ -42,6 +85,7 @@ router.post(
   blockIfSuspended,
   upload.array("images", 10),
   async (req, res) => {
+    await ensureListingColumns();
     const {
       title,
       description,
@@ -56,6 +100,9 @@ router.post(
       tags,
       status,
       seller_email,
+      is_draft,
+      delivery_type,
+      delivery_notes,
     } = req.body;
 
     try {
@@ -112,11 +159,14 @@ router.post(
             .filter((tag) => tag)
         : [];
 
+      const isDraft = is_draft === "true" || is_draft === true;
+      const moderationStatus = isDraft ? "draft" : "pending";
+
       // New listings start with 'pending' moderation status
       const listingResult = await db.query(
         `INSERT INTO userlistings 
-       (userid, title, description, price, currency, categoryid, location, country, city, condition, phone, seller_email, tags, status, moderation_status, createdat) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW()) 
+       (userid, title, description, price, currency, categoryid, location, country, city, condition, phone, seller_email, tags, status, moderation_status, is_draft, delivery_type, delivery_notes, createdat) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW()) 
        RETURNING *`,
         [
           userId,
@@ -133,7 +183,10 @@ router.post(
           seller_email || null,
           tagsArray,
           status || "Available",
-          "pending", // All new listings require admin approval
+          moderationStatus,
+          isDraft,
+          delivery_type || "pickup",
+          delivery_notes || null,
         ],
       );
 
@@ -176,13 +229,43 @@ router.post(
         }
       }
 
-      // Notify admin about new listing
+      // Notify admin about new listing (skip for drafts)
       const posterResult = await db.query(
         "SELECT id, name, email FROM users WHERE id = $1",
         [req.user.id],
       );
-      if (posterResult.rows.length > 0) {
+      if (posterResult.rows.length > 0 && !isDraft) {
         sendListingSubmittedAdmin(posterResult.rows[0], listingResult.rows[0]);
+
+        // Notify followers of this seller
+        try {
+          const followersRes = await db.query(
+            `SELECT f.follower_id, u.name AS follower_name, u.email AS follower_email
+             FROM seller_followers f
+             JOIN users u ON u.id = f.follower_id
+             WHERE f.seller_id = $1`,
+            [req.user.id],
+          );
+          const seller = posterResult.rows[0];
+          const listing = listingResult.rows[0];
+          for (const follower of followersRes.rows) {
+            sendPushToUser(
+              follower.follower_id,
+              buildNotificationPayload("new_listing_from_followed", {
+                title: `${seller.name} posted a new listing`,
+                body: `"${listing.title}" — ${Number(listing.price).toLocaleString()} ${listing.currency}`,
+                url: `/listing/${listing.id}`,
+              }),
+            );
+            sendNewListingFromFollowed(
+              { name: follower.follower_name, email: follower.follower_email },
+              { id: seller.id, name: seller.name },
+              listing,
+            );
+          }
+        } catch (followerErr) {
+          console.warn("[Listings] Follower notify error:", followerErr.message);
+        }
       }
 
       res.status(201).json({
@@ -204,10 +287,11 @@ router.post(
   },
 );
 
-// Get current user's listings (includes all moderation statuses)
+// Get current user's listings (includes all moderation statuses, including drafts)
 router.get("/my-listings", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
+    await ensureListingColumns();
 
     const listingsResult = await db.query(
       `SELECT l.*, c.name as category_name
@@ -268,7 +352,7 @@ router.get("/listings", authMiddleware, async (req, res) => {
                      LEFT JOIN categories c ON l.categoryid = c.id 
                      LEFT JOIN users u ON l.userid = u.id
                      LEFT JOIN kyc_verifications kyc ON u.id = kyc.userid AND kyc.status = 'approved'
-                     WHERE l.moderation_status = 'approved' AND l.status = 'Available'`;
+                     WHERE l.moderation_status = 'approved' AND l.status = 'Available' AND (l.is_draft IS NULL OR l.is_draft = FALSE)`;
     const queryParams = [];
     let paramCount = 1;
 
@@ -353,6 +437,16 @@ router.get("/listings", authMiddleware, async (req, res) => {
 
     // Strip seller_email from all public listing responses — never expose to clients
     const safe = listingsWithImages.map(({ seller_email, ...rest }) => rest);
+
+    // Log search term asynchronously (fire-and-forget)
+    if (search && search.trim().length >= 2) {
+      const userId = req.user?.id || null;
+      db.query(
+        `INSERT INTO search_logs (user_id, query) VALUES ($1, $2)`,
+        [userId, search.trim().toLowerCase()],
+      ).catch(() => {});
+    }
+
     res.status(200).json(safe);
   } catch (error) {
     console.error("Error fetching listings:", error.message);
@@ -360,6 +454,48 @@ router.get("/listings", authMiddleware, async (req, res) => {
     res
       .status(500)
       .json({ error: "Failed to fetch listings", details: error.message });
+  }
+});
+
+// Trending searches — top 10 queries from the last 7 days
+router.get("/listings/trending-searches", authMiddleware, async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT query, COUNT(*) AS count
+       FROM search_logs
+       WHERE created_at > NOW() - INTERVAL '7 days'
+         AND LENGTH(query) >= 2
+       GROUP BY query
+       ORDER BY count DESC
+       LIMIT 10`,
+    );
+    res.json({ trending: result.rows.map((r) => r.query) });
+  } catch (err) {
+    console.error("[Listings] trending-searches error:", err.message);
+    res.json({ trending: [] }); // Non-fatal
+  }
+});
+
+// Duplicate title check — returns user's similar active listings
+router.get("/listings/check-duplicate", authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const { title } = req.query;
+  if (!title || title.trim().length < 3) return res.json({ duplicates: [] });
+
+  try {
+    const result = await db.query(
+      `SELECT id, title, status FROM userlistings
+       WHERE userid = $1
+         AND LOWER(title) LIKE LOWER($2)
+         AND status NOT IN ('Expired', 'Sold')
+         AND (is_draft IS NULL OR is_draft = FALSE)
+       LIMIT 3`,
+      [userId, `%${title.trim()}%`],
+    );
+    res.json({ duplicates: result.rows });
+  } catch (err) {
+    console.error("[Listings] check-duplicate error:", err.message);
+    res.json({ duplicates: [] });
   }
 });
 
@@ -389,6 +525,14 @@ router.get("/listings/:id", authMiddleware, async (req, res) => {
 
     // Strip seller_email — never expose to clients
     const { seller_email, ...safeListing } = listingResult.rows[0];
+
+    // Increment view count for non-owners (fire-and-forget)
+    if (req.user?.id && req.user.id !== safeListing.userid) {
+      db.query(
+        `UPDATE userlistings SET view_count = COALESCE(view_count, 0) + 1 WHERE id = $1`,
+        [id],
+      ).catch(() => {});
+    }
 
     // Fetch images for the listing
     const imagesResult = await db.query(
@@ -573,42 +717,197 @@ router.put("/listings/:id/mark-available", authMiddleware, async (req, res) => {
 });
 
 // Renew an expired listing (owner only) — resets createdat, re-queues for moderation
-router.put("/listings/:id/renew", authMiddleware, blockIfSuspended, async (req, res) => {
-  const { id } = req.params;
-  const userId = req.user.id;
+router.put(
+  "/listings/:id/renew",
+  authMiddleware,
+  blockIfSuspended,
+  async (req, res) => {
+    const { id } = req.params;
+    const userId = req.user.id;
 
-  try {
-    const listingCheck = await db.query(
-      "SELECT id, userid, status, title FROM userlistings WHERE id = $1",
-      [id],
-    );
-    if (listingCheck.rows.length === 0) {
-      return res.status(404).json({ error: "Listing not found" });
-    }
-    const listing = listingCheck.rows[0];
-    if (listing.userid !== userId) {
-      return res.status(403).json({ error: "You can only renew your own listings" });
-    }
-    if (listing.status !== "Expired") {
-      return res.status(400).json({ error: "Only expired listings can be renewed" });
-    }
+    try {
+      const listingCheck = await db.query(
+        "SELECT id, userid, status, title FROM userlistings WHERE id = $1",
+        [id],
+      );
+      if (listingCheck.rows.length === 0) {
+        return res.status(404).json({ error: "Listing not found" });
+      }
+      const listing = listingCheck.rows[0];
+      if (listing.userid !== userId) {
+        return res
+          .status(403)
+          .json({ error: "You can only renew your own listings" });
+      }
+      if (listing.status !== "Expired") {
+        return res
+          .status(400)
+          .json({ error: "Only expired listings can be renewed" });
+      }
 
-    const result = await db.query(
-      `UPDATE userlistings
+      const result = await db.query(
+        `UPDATE userlistings
        SET status = 'Available', moderation_status = 'pending', createdat = NOW(), updatedat = NOW()
        WHERE id = $1
        RETURNING *`,
+        [id],
+      );
+      res.status(200).json({
+        message: "Listing renewed and resubmitted for review",
+        listing: result.rows[0],
+      });
+    } catch (error) {
+      console.error("Error renewing listing:", error);
+      res.status(500).json({ error: "Failed to renew listing" });
+    }
+  },
+);
+
+// Update listing price — owner only. Notifies wishlist users if price drops.
+router.put("/listings/:id/update-price", authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+  const { price } = req.body;
+
+  const newPrice = parseFloat(price);
+  if (isNaN(newPrice) || newPrice <= 0) {
+    return res.status(400).json({ error: "Invalid price." });
+  }
+
+  try {
+    const listingCheck = await db.query(
+      "SELECT id, userid, title, price, currency, status FROM userlistings WHERE id = $1",
       [id],
     );
-    res.status(200).json({
-      message: "Listing renewed and resubmitted for review",
-      listing: result.rows[0],
-    });
+    if (listingCheck.rows.length === 0)
+      return res.status(404).json({ error: "Listing not found" });
+    const listing = listingCheck.rows[0];
+    if (listing.userid !== userId)
+      return res
+        .status(403)
+        .json({ error: "You can only update your own listings" });
+
+    const oldPrice = parseFloat(listing.price);
+
+    await db.query(
+      `UPDATE userlistings SET price = $1, updatedat = NOW() WHERE id = $2`,
+      [newPrice, id],
+    );
+
+    // Price drop: notify wishlist users
+    if (newPrice < oldPrice) {
+      try {
+        const wishlistRes = await db.query(
+          `SELECT f.userid, u.name, u.email
+           FROM favorites f
+           JOIN users u ON u.id = f.userid
+           WHERE f.listingid = $1 AND f.userid != $2`,
+          [id, userId],
+        );
+        for (const user of wishlistRes.rows) {
+          sendPushToUser(
+            user.userid,
+            buildNotificationPayload("price_drop", {
+              title: "Price drop on your wishlist",
+              body: `"${listing.title}" dropped from ${Number(oldPrice).toLocaleString()} to ${Number(newPrice).toLocaleString()} ${listing.currency}`,
+              url: `/listing/${id}`,
+            }),
+          );
+          sendPriceDropAlert(
+            user,
+            { id, title: listing.title, currency: listing.currency },
+            oldPrice,
+            newPrice,
+          );
+        }
+      } catch (alertErr) {
+        console.warn("[Listings] Price drop alert error:", alertErr.message);
+      }
+    }
+
+    res.json({ message: "Price updated.", oldPrice, newPrice });
   } catch (error) {
-    console.error("Error renewing listing:", error);
-    res.status(500).json({ error: "Failed to renew listing" });
+    console.error("Error updating price:", error);
+    res.status(500).json({ error: "Failed to update price" });
   }
 });
 
-export default router;
+// Publish a draft listing — sends it to moderation queue
+router.put(
+  "/listings/:id/publish",
+  authMiddleware,
+  blockIfSuspended,
+  async (req, res) => {
+    const { id } = req.params;
+    const userId = req.user.id;
+    try {
+      const listingCheck = await db.query(
+        "SELECT id, userid, title, price, currency, city, country, is_draft FROM userlistings WHERE id = $1",
+        [id],
+      );
+      if (listingCheck.rows.length === 0)
+        return res.status(404).json({ error: "Listing not found" });
+      const listing = listingCheck.rows[0];
+      if (listing.userid !== userId)
+        return res
+          .status(403)
+          .json({ error: "You can only publish your own listings" });
+      if (!listing.is_draft)
+        return res
+          .status(400)
+          .json({ error: "Listing is not a draft." });
 
+      const result = await db.query(
+        `UPDATE userlistings
+         SET is_draft = FALSE, moderation_status = 'pending', updatedat = NOW()
+         WHERE id = $1 RETURNING *`,
+        [id],
+      );
+
+      // Notify admin
+      const posterResult = await db.query(
+        "SELECT id, name, email FROM users WHERE id = $1",
+        [userId],
+      );
+      if (posterResult.rows.length > 0) {
+        sendListingSubmittedAdmin(posterResult.rows[0], result.rows[0]);
+
+        // Notify followers
+        try {
+          const followersRes = await db.query(
+            `SELECT f.follower_id, u.name AS follower_name, u.email AS follower_email
+             FROM seller_followers f
+             JOIN users u ON u.id = f.follower_id
+             WHERE f.seller_id = $1`,
+            [userId],
+          );
+          const seller = posterResult.rows[0];
+          for (const follower of followersRes.rows) {
+            sendPushToUser(
+              follower.follower_id,
+              buildNotificationPayload("new_listing_from_followed", {
+                title: `${seller.name} posted a new listing`,
+                body: `"${listing.title}"`,
+                url: `/listing/${id}`,
+              }),
+            );
+            sendNewListingFromFollowed(
+              { name: follower.follower_name, email: follower.follower_email },
+              { id: seller.id, name: seller.name },
+              listing,
+            );
+          }
+        } catch (followerErr) {
+          console.warn("[Listings] Publish follower notify error:", followerErr.message);
+        }
+      }
+
+      res.json({ message: "Listing submitted for review.", listing: result.rows[0] });
+    } catch (error) {
+      console.error("Error publishing listing:", error);
+      res.status(500).json({ error: "Failed to publish listing" });
+    }
+  },
+);
+
+export default router;

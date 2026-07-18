@@ -642,10 +642,10 @@ export async function sendReportSubmittedAdmin(report) {
 
 export async function sendOfferReceived(seller, listing, offer) {
   const dashLink = `${APP_URL}/listing/${listing.id}`;
-  const fmtOffer = Number(offer.amount).toLocaleString('en-US');
-  const fmtAsk   = Number(listing.price).toLocaleString('en-US');
+  const fmtOffer = Number(offer.amount).toLocaleString("en-US");
+  const fmtAsk = Number(listing.price).toLocaleString("en-US");
   const html = wrap(
-    'New Offer Received — Njimbong',
+    "New Offer Received — Njimbong",
     `
     <p class="greeting">You received an offer on your listing, ${seller.name}.</p>
     <p class="text">A buyer has made an offer on one of your listings. You can accept, counter, or decline from the listing page.</p>
@@ -653,7 +653,7 @@ export async function sendOfferReceived(seller, listing, offer) {
       <div class="info-row"><span class="info-label">Item</span><span class="info-value">${listing.title}</span></div>
       <div class="info-row"><span class="info-label">Your asking price</span><span class="info-value">${fmtAsk} ${listing.currency}</span></div>
       <div class="info-row"><span class="info-label">Offer amount</span><span class="info-value" style="font-size:16px;font-weight:700;color:#15803d;">${fmtOffer} ${listing.currency}</span></div>
-      ${offer.message ? `<div class="info-row"><span class="info-label">Message</span><span class="info-value">${offer.message}</span></div>` : ''}
+      ${offer.message ? `<div class="info-row"><span class="info-label">Message</span><span class="info-value">${offer.message}</span></div>` : ""}
     </div>
     <p style="text-align:center;margin:28px 0;">
       <a href="${dashLink}" class="btn">View Offer</a>
@@ -662,16 +662,20 @@ export async function sendOfferReceived(seller, listing, offer) {
     <p class="meta">Offers expire after 48 hours if not acted upon.</p>
   `,
   );
-  await send({ to: seller.email, subject: `New offer on "${listing.title}" — Njimbong`, html });
+  await send({
+    to: seller.email,
+    subject: `New offer on "${listing.title}" — Njimbong`,
+    html,
+  });
 }
 
 // ─── 17. Offer accepted — notify buyer ───────────────────────────────────────
 
 export async function sendOfferAccepted(buyer, listing, offer) {
   const listingLink = `${APP_URL}/listing/${listing.id}`;
-  const fmtOffer = Number(offer.amount).toLocaleString('en-US');
+  const fmtOffer = Number(offer.amount).toLocaleString("en-US");
   const html = wrap(
-    'Your Offer Was Accepted — Njimbong',
+    "Your Offer Was Accepted — Njimbong",
     `
     <p class="greeting">Great news, ${buyer.name} — your offer was accepted!</p>
     <p class="text">The seller has accepted your offer. Complete your purchase now using Fonlok secure escrow to claim the item before it is released to other buyers.</p>
@@ -686,17 +690,27 @@ export async function sendOfferAccepted(buyer, listing, offer) {
     <p class="meta">This agreed price is valid for 48 hours. After that the listing returns to full price.</p>
   `,
   );
-  await send({ to: buyer.email, subject: `Your offer on "${listing.title}" was accepted — Njimbong`, html });
+  await send({
+    to: buyer.email,
+    subject: `Your offer on "${listing.title}" was accepted — Njimbong`,
+    html,
+  });
 }
 
 // ─── 18. Offer countered — notify buyer ──────────────────────────────────────
 
-export async function sendOfferCountered(buyer, listing, originalAmount, counterAmount, currency) {
+export async function sendOfferCountered(
+  buyer,
+  listing,
+  originalAmount,
+  counterAmount,
+  currency,
+) {
   const listingLink = `${APP_URL}/listing/${listing.id}`;
-  const fmtOriginal = Number(originalAmount).toLocaleString('en-US');
-  const fmtCounter  = Number(counterAmount).toLocaleString('en-US');
+  const fmtOriginal = Number(originalAmount).toLocaleString("en-US");
+  const fmtCounter = Number(counterAmount).toLocaleString("en-US");
   const html = wrap(
-    'Counter-Offer Received — Njimbong',
+    "Counter-Offer Received — Njimbong",
     `
     <p class="greeting">${buyer.name}, the seller has countered your offer.</p>
     <p class="text">The seller has responded to your offer with a counter-offer. You can accept their counter-offer directly on the listing page.</p>
@@ -712,29 +726,36 @@ export async function sendOfferCountered(buyer, listing, originalAmount, counter
     <p class="meta">Counter-offers expire after 48 hours if not acted upon.</p>
   `,
   );
-  await send({ to: buyer.email, subject: `Counter-offer on "${listing.title}" — Njimbong`, html });
+  await send({
+    to: buyer.email,
+    subject: `Counter-offer on "${listing.title}" — Njimbong`,
+    html,
+  });
 }
 
 // ─── 19. Saved search alert — notify user ────────────────────────────────────
 
 export async function sendSavedSearchAlert(user, searchName, matches) {
   const marketLink = `${APP_URL}/market`;
-  const listingItems = matches.slice(0, 5).map((l) => {
-    const price = Number(l.price).toLocaleString('en-US');
-    const link  = `${APP_URL}/listing/${l.id}`;
-    return `<div style="border:1px solid #e4e4e7;border-radius:8px;padding:14px;margin-bottom:10px;">
+  const listingItems = matches
+    .slice(0, 5)
+    .map((l) => {
+      const price = Number(l.price).toLocaleString("en-US");
+      const link = `${APP_URL}/listing/${l.id}`;
+      return `<div style="border:1px solid #e4e4e7;border-radius:8px;padding:14px;margin-bottom:10px;">
       <p style="font-size:15px;font-weight:600;color:#18181b;margin-bottom:4px;"><a href="${link}" style="color:#18181b;text-decoration:none;">${l.title}</a></p>
       <p style="font-size:14px;color:#15803d;font-weight:700;margin-bottom:4px;">${price} ${l.currency}</p>
       <p style="font-size:13px;color:#71717a;">${l.city}, ${l.country}</p>
     </div>`;
-  }).join('');
+    })
+    .join("");
   const html = wrap(
-    'New Listings Match Your Saved Search — Njimbong',
+    "New Listings Match Your Saved Search — Njimbong",
     `
     <p class="greeting">New listings match your saved search, ${user.name}.</p>
-    <p class="text">We found <strong>${matches.length} new listing${matches.length > 1 ? 's' : ''}</strong> matching your saved search <strong>"${searchName}"</strong>.</p>
+    <p class="text">We found <strong>${matches.length} new listing${matches.length > 1 ? "s" : ""}</strong> matching your saved search <strong>"${searchName}"</strong>.</p>
     ${listingItems}
-    ${matches.length > 5 ? `<p style="font-size:13px;color:#71717a;text-align:center;margin-top:8px;">and ${matches.length - 5} more…</p>` : ''}
+    ${matches.length > 5 ? `<p style="font-size:13px;color:#71717a;text-align:center;margin-top:8px;">and ${matches.length - 5} more…</p>` : ""}
     <p style="text-align:center;margin:28px 0;">
       <a href="${marketLink}" class="btn">Browse All Listings</a>
     </p>
@@ -742,7 +763,11 @@ export async function sendSavedSearchAlert(user, searchName, matches) {
     <p class="meta">You are receiving this because you saved a search alert. You can manage your saved searches from your <a href="${APP_URL}/dashboard">dashboard</a>.</p>
   `,
   );
-  await send({ to: user.email, subject: `${matches.length} new listing${matches.length > 1 ? 's' : ''} match your saved search "${searchName}" — Njimbong`, html });
+  await send({
+    to: user.email,
+    subject: `${matches.length} new listing${matches.length > 1 ? "s" : ""} match your saved search "${searchName}" — Njimbong`,
+    html,
+  });
 }
 
 // ─── 20. Listing expiry warning — notify seller ───────────────────────────────
@@ -750,14 +775,14 @@ export async function sendSavedSearchAlert(user, searchName, matches) {
 export async function sendListingExpiryWarning(user, listing) {
   const renewLink = `${APP_URL}/dashboard`;
   const html = wrap(
-    'Your Listing Is Expiring Soon — Njimbong',
+    "Your Listing Is Expiring Soon — Njimbong",
     `
     <p class="greeting">${user.name}, your listing expires in 7 days.</p>
     <p class="text">Listings on Njimbong expire after 60 days to keep the marketplace fresh. Your listing below will be automatically deactivated in 7 days unless you renew it.</p>
     <div class="info-box-amber">
       <div class="info-row"><span class="info-label">Listing</span><span class="info-value">${listing.title}</span></div>
-      <div class="info-row"><span class="info-label">Price</span><span class="info-value">${Number(listing.price).toLocaleString('en-US')} ${listing.currency}</span></div>
-      <div class="info-row"><span class="info-label">Expires</span><span class="info-value">${new Date(listing.expires_at || Date.now() + 7*24*60*60*1000).toDateString()}</span></div>
+      <div class="info-row"><span class="info-label">Price</span><span class="info-value">${Number(listing.price).toLocaleString("en-US")} ${listing.currency}</span></div>
+      <div class="info-row"><span class="info-label">Expires</span><span class="info-value">${new Date(listing.expires_at || Date.now() + 7 * 24 * 60 * 60 * 1000).toDateString()}</span></div>
     </div>
     <p style="text-align:center;margin:28px 0;">
       <a href="${renewLink}" class="btn">Renew Listing</a>
@@ -766,7 +791,11 @@ export async function sendListingExpiryWarning(user, listing) {
     <p class="meta">Renewing is free and takes one click. Your listing returns to the top of search results.</p>
   `,
   );
-  await send({ to: user.email, subject: `Your listing "${listing.title}" expires in 7 days — renew now`, html });
+  await send({
+    to: user.email,
+    subject: `Your listing "${listing.title}" expires in 7 days — renew now`,
+    html,
+  });
 }
 
 // ─── 21. Listing expired — notify seller ─────────────────────────────────────
@@ -774,14 +803,81 @@ export async function sendListingExpiryWarning(user, listing) {
 export async function sendListingExpired(user, listing) {
   const renewLink = `${APP_URL}/dashboard`;
   const html = wrap(
-    'Your Listing Has Expired — Njimbong',
+    "Your Listing Has Expired — Njimbong",
     `
     <p class="greeting">${user.name}, your listing has expired.</p>
     <p class="text">Your listing has been automatically deactivated after 60 days. You can renew it with one click to make it live again — it will appear as a fresh listing at the top of search results.</p>
     <div class="info-box">
       <div class="info-row"><span class="info-label">Listing</span><span class="info-value">${listing.title}</span></div>
-      <div class="info-row"><span class="info-label">Price</span><span class="info-value">${Number(listing.price).toLocaleString('en-US')} ${listing.currency}</span></div>
+      <div class="info-row"><span class="info-label">Price</span><span class="info-value">${Number(listing.price).toLocaleString("en-US")} ${listing.currency}</span></div>
     </div>
+    <a class="btn" href="${renewLink}">Renew Listing</a>
+    <hr class="divider"/>
+    <p class="meta">Renewing is free and takes one click. Your listing returns to the top of search results.</p>
+  `,
+  );
+  await send({
+    to: user.email,
+    subject: `Your listing "${listing.title}" has expired`,
+    html,
+  });
+}
+
+// ─── 22. Price drop alert — notify wishlist user ───────────────────────────────
+
+export async function sendPriceDropAlert(user, listing, oldPrice, newPrice) {
+  const listingLink = `${APP_URL}/listing/${listing.id}`;
+  const drop = Math.round(((oldPrice - newPrice) / oldPrice) * 100);
+  const html = wrap(
+    "Price Drop on Your Wishlist — Njimbong",
+    `
+    <p class="greeting">Good news, ${user.name}!</p>
+    <p class="text">The price just dropped on an item you saved to your wishlist.</p>
+    <div class="info-box">
+      <div class="info-row"><span class="info-label">Item</span><span class="info-value">${listing.title}</span></div>
+      <div class="info-row"><span class="info-label">Old Price</span><span class="info-value">${Number(oldPrice).toLocaleString("en-US")} ${listing.currency}</span></div>
+      <div class="info-row"><span class="info-label">New Price</span><span class="info-value">${Number(newPrice).toLocaleString("en-US")} ${listing.currency}</span></div>
+      <div class="info-row"><span class="info-label">Saving</span><span class="info-value">${drop}% off</span></div>
+    </div>
+    <a class="btn" href="${listingLink}">View Listing</a>
+    <hr class="divider"/>
+    <p class="meta">You saved this item to your wishlist. <a href="${APP_URL}/favorites">Manage wishlist</a></p>
+  `,
+  );
+  await send({
+    to: user.email,
+    subject: `Price drop — "${listing.title}" is now ${Number(newPrice).toLocaleString("en-US")} ${listing.currency}`,
+    html,
+  });
+}
+
+// ─── 23. New listing from followed seller ─────────────────────────────────────
+
+export async function sendNewListingFromFollowed(user, seller, listing) {
+  const listingLink = `${APP_URL}/listing/${listing.id}`;
+  const sellerLink = `${APP_URL}/profile/${seller.id}`;
+  const html = wrap(
+    `New Listing from ${seller.name} — Njimbong`,
+    `
+    <p class="greeting">Hey ${user.name},</p>
+    <p class="text"><strong>${seller.name}</strong>, a seller you follow, just posted a new listing.</p>
+    <div class="info-box">
+      <div class="info-row"><span class="info-label">Item</span><span class="info-value">${listing.title}</span></div>
+      <div class="info-row"><span class="info-label">Price</span><span class="info-value">${Number(listing.price).toLocaleString("en-US")} ${listing.currency}</span></div>
+      <div class="info-row"><span class="info-label">Location</span><span class="info-value">${listing.city}, ${listing.country}</span></div>
+    </div>
+    <a class="btn" href="${listingLink}">View Listing</a>
+    <a class="btn-outline" href="${sellerLink}">View Seller Profile</a>
+    <hr class="divider"/>
+    <p class="meta">You're following ${seller.name}. <a href="${APP_URL}/profile/${seller.id}">Unfollow</a></p>
+  `,
+  );
+  await send({
+    to: user.email,
+    subject: `${seller.name} just posted: "${listing.title}"`,
+    html,
+  });
+}
     <p style="text-align:center;margin:28px 0;">
       <a href="${renewLink}" class="btn">Renew Listing Now</a>
     </p>
@@ -789,15 +885,24 @@ export async function sendListingExpired(user, listing) {
     <p class="meta">Renewal is free. Your listing will go back through standard moderation review.</p>
   `,
   );
-  await send({ to: user.email, subject: `Your listing "${listing.title}" has expired — renew to relist`, html });
+  await send({
+    to: user.email,
+    subject: `Your listing "${listing.title}" has expired — renew to relist`,
+    html,
+  });
 }
 
 // ─── 22. Dispute filed — notify both parties + admin ─────────────────────────
 
-export async function sendDisputeFiledToAdmin(disputer, listing, orderId, description) {
+export async function sendDisputeFiledToAdmin(
+  disputer,
+  listing,
+  orderId,
+  description,
+) {
   const reviewLink = `${APP_URL}/admin_dashboard/moderation`;
   const html = wrap(
-    'Dispute Filed — Njimbong Admin',
+    "Dispute Filed — Njimbong Admin",
     `
     <p class="greeting">A dispute has been filed for an active escrow order.</p>
     <div class="info-box-red">
@@ -812,12 +917,16 @@ export async function sendDisputeFiledToAdmin(disputer, listing, orderId, descri
     </p>
   `,
   );
-  await send({ to: ADMIN_EMAIL, subject: `Dispute filed — Order #${orderId} "${listing.title}" — action required`, html });
+  await send({
+    to: ADMIN_EMAIL,
+    subject: `Dispute filed — Order #${orderId} "${listing.title}" — action required`,
+    html,
+  });
 }
 
 export async function sendDisputeConfirmation(user, listing, orderId) {
   const html = wrap(
-    'Dispute Submitted — Njimbong',
+    "Dispute Submitted — Njimbong",
     `
     <p class="greeting">${user.name}, your dispute has been submitted.</p>
     <p class="text">Our team has been notified and will review your dispute within 24–48 business hours. The funds held in escrow remain frozen until the dispute is resolved.</p>
@@ -830,5 +939,9 @@ export async function sendDisputeConfirmation(user, listing, orderId) {
     <p class="meta">For urgent matters, contact <a href="mailto:support@njimbong.com">support@njimbong.com</a> with your order reference <strong>#${orderId}</strong>.</p>
   `,
   );
-  await send({ to: user.email, subject: `Dispute submitted for order #${orderId} — Njimbong`, html });
+  await send({
+    to: user.email,
+    subject: `Dispute submitted for order #${orderId} — Njimbong`,
+    html,
+  });
 }

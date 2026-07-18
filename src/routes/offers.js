@@ -37,81 +37,96 @@ const ensureOffersTable = async () => {
 };
 
 // ─── POST /api/offers — buyer makes an offer ──────────────────────────────────
-router.post(
-  "/offers",
-  authMiddleware,
-  blockIfSuspended,
-  async (req, res) => {
-    await ensureOffersTable();
-    const buyerId = req.user.id;
-    const { listing_id, amount, message } = req.body;
+router.post("/offers", authMiddleware, blockIfSuspended, async (req, res) => {
+  await ensureOffersTable();
+  const buyerId = req.user.id;
+  const { listing_id, amount, message } = req.body;
 
-    if (!listing_id || !amount) {
-      return res.status(400).json({ error: "listing_id and amount are required." });
-    }
-    const parsedAmount = parseFloat(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      return res.status(400).json({ error: "Invalid offer amount." });
-    }
+  if (!listing_id || !amount) {
+    return res
+      .status(400)
+      .json({ error: "listing_id and amount are required." });
+  }
+  const parsedAmount = parseFloat(amount);
+  if (isNaN(parsedAmount) || parsedAmount <= 0) {
+    return res.status(400).json({ error: "Invalid offer amount." });
+  }
 
-    try {
-      // Get listing details
-      const listingRes = await db.query(
-        `SELECT l.*, u.name AS seller_name, u.email AS seller_email
+  try {
+    // Get listing details
+    const listingRes = await db.query(
+      `SELECT l.*, u.name AS seller_name, u.email AS seller_email
          FROM userlistings l
          JOIN users u ON u.id = l.userid
          WHERE l.id = $1 AND l.status = 'Available' AND l.moderation_status = 'approved'`,
-        [listing_id],
-      );
-      if (listingRes.rows.length === 0) {
-        return res.status(404).json({ error: "Listing not found or not available." });
-      }
-      const listing = listingRes.rows[0];
+      [listing_id],
+    );
+    if (listingRes.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ error: "Listing not found or not available." });
+    }
+    const listing = listingRes.rows[0];
 
-      if (listing.userid === buyerId) {
-        return res.status(400).json({ error: "You cannot make an offer on your own listing." });
-      }
+    if (listing.userid === buyerId) {
+      return res
+        .status(400)
+        .json({ error: "You cannot make an offer on your own listing." });
+    }
 
-      // Only one active offer per buyer per listing
-      const existing = await db.query(
-        `SELECT id FROM offers WHERE listing_id=$1 AND buyer_id=$2 AND status='pending' LIMIT 1`,
-        [listing_id, buyerId],
-      );
-      if (existing.rows.length > 0) {
-        return res.status(409).json({ error: "You already have a pending offer on this listing." });
-      }
+    // Only one active offer per buyer per listing
+    const existing = await db.query(
+      `SELECT id FROM offers WHERE listing_id=$1 AND buyer_id=$2 AND status='pending' LIMIT 1`,
+      [listing_id, buyerId],
+    );
+    if (existing.rows.length > 0) {
+      return res
+        .status(409)
+        .json({ error: "You already have a pending offer on this listing." });
+    }
 
-      const offerRes = await db.query(
-        `INSERT INTO offers (listing_id, buyer_id, seller_id, amount, currency, message)
+    const offerRes = await db.query(
+      `INSERT INTO offers (listing_id, buyer_id, seller_id, amount, currency, message)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
-        [listing_id, buyerId, listing.userid, parsedAmount, listing.currency, message || null],
-      );
-      const offer = offerRes.rows[0];
-
-      // Notify seller via push
-      sendPushToUser(
+      [
+        listing_id,
+        buyerId,
         listing.userid,
-        buildNotificationPayload("new_offer", {
-          title: "New offer received",
-          body: `${parsedAmount.toLocaleString()} ${listing.currency} offer on "${listing.title}"`,
-          url: `/listing/${listing_id}`,
-        }),
-      );
-      // Notify seller via email
-      sendOfferReceived(
-        { name: listing.seller_name, email: listing.seller_email },
-        { id: listing.id, title: listing.title, price: listing.price, currency: listing.currency },
-        { amount: parsedAmount, message: message || null },
-      );
+        parsedAmount,
+        listing.currency,
+        message || null,
+      ],
+    );
+    const offer = offerRes.rows[0];
 
-      res.status(201).json({ offer });
-    } catch (err) {
-      console.error("[Offers] POST error:", err.message);
-      res.status(500).json({ error: "Failed to submit offer." });
-    }
-  },
-);
+    // Notify seller via push
+    sendPushToUser(
+      listing.userid,
+      buildNotificationPayload("new_offer", {
+        title: "New offer received",
+        body: `${parsedAmount.toLocaleString()} ${listing.currency} offer on "${listing.title}"`,
+        url: `/listing/${listing_id}`,
+      }),
+    );
+    // Notify seller via email
+    sendOfferReceived(
+      { name: listing.seller_name, email: listing.seller_email },
+      {
+        id: listing.id,
+        title: listing.title,
+        price: listing.price,
+        currency: listing.currency,
+      },
+      { amount: parsedAmount, message: message || null },
+    );
+
+    res.status(201).json({ offer });
+  } catch (err) {
+    console.error("[Offers] POST error:", err.message);
+    res.status(500).json({ error: "Failed to submit offer." });
+  }
+});
 
 // ─── GET /api/offers/listing/:id — seller or buyer views offers on a listing ──
 router.get("/offers/listing/:id", authMiddleware, async (req, res) => {
@@ -162,15 +177,19 @@ router.get("/offers/mine", authMiddleware, async (req, res) => {
 });
 
 // ─── PUT /api/offers/:id — seller accepts / counters / declines ───────────────
+// Also handles buyer accepting / declining a counter-offer
 router.put("/offers/:id", authMiddleware, async (req, res) => {
   await ensureOffersTable();
   const userId = req.user.id;
   const { id } = req.params;
   const { action, counter_amount, counter_message } = req.body;
-  // action: 'accept' | 'decline' | 'counter'
+  // Seller actions: 'accept' | 'decline' | 'counter'
+  // Buyer actions:  'accept_counter' | 'decline_counter'
 
-  if (!["accept", "decline", "counter"].includes(action)) {
-    return res.status(400).json({ error: "action must be accept, decline, or counter." });
+  if (!["accept", "decline", "counter", "accept_counter", "decline_counter"].includes(action)) {
+    return res
+      .status(400)
+      .json({ error: "Invalid action." });
   }
 
   try {
@@ -185,20 +204,67 @@ router.put("/offers/:id", authMiddleware, async (req, res) => {
        WHERE o.id = $1`,
       [id],
     );
-    if (offerRes.rows.length === 0) return res.status(404).json({ error: "Offer not found." });
+    if (offerRes.rows.length === 0)
+      return res.status(404).json({ error: "Offer not found." });
     const offer = offerRes.rows[0];
 
-    // Only seller can accept/counter/decline
+    // ── Buyer responding to counter ──────────────────────────────────────────
+    if (action === "accept_counter" || action === "decline_counter") {
+      if (offer.buyer_id !== userId) {
+        return res.status(403).json({ error: "Only the buyer can respond to a counter-offer." });
+      }
+      if (offer.status !== "countered") {
+        return res.status(409).json({ error: "Offer is not in a countered state." });
+      }
+
+      const newStatus = action === "accept_counter" ? "accepted" : "declined";
+      // When accepting a counter, the accepted amount becomes the counter_amount
+      const acceptedAmount = action === "accept_counter" ? offer.counter_amount : offer.amount;
+
+      await db.query(
+        `UPDATE offers SET status=$1, amount=$2, updated_at=NOW() WHERE id=$3`,
+        [newStatus, acceptedAmount, id],
+      );
+
+      if (action === "accept_counter") {
+        sendPushToUser(
+          offer.seller_id,
+          buildNotificationPayload("counter_accepted", {
+            title: "Counter-offer accepted!",
+            body: `The buyer accepted your counter-offer on "${offer.title}" for ${Number(acceptedAmount).toLocaleString()} ${offer.currency}.`,
+            url: `/listing/${offer.listing_id}`,
+          }),
+        );
+        // In-app notification for seller
+        await db.query(
+          `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
+           VALUES ($1, 'Counter-offer accepted', $2, 'offer', $3, 'listing')`,
+          [offer.seller_id, `Buyer accepted your counter-offer on "${offer.title}" for ${Number(acceptedAmount).toLocaleString()} ${offer.currency}.`, offer.listing_id],
+        );
+      }
+
+      return res.json({ message: `Counter-offer ${newStatus}.` });
+    }
+
+    // ── Seller responding ─────────────────────────────────────────────────────
     if (offer.seller_id !== userId) {
-      // Buyer can only withdraw
-      return res.status(403).json({ error: "Only the seller can respond to an offer." });
+      return res
+        .status(403)
+        .json({ error: "Only the seller can respond to an offer." });
     }
 
     if (offer.status !== "pending") {
-      return res.status(409).json({ error: `Offer is already ${offer.status}.` });
+      return res
+        .status(409)
+        .json({ error: `Offer is already ${offer.status}.` });
     }
 
-    let newStatus = action === "accept" ? "accepted" : action === "decline" ? "declined" : "countered";
+    let newStatus =
+      action === "accept"
+        ? "accepted"
+        : action === "decline"
+          ? "declined"
+          : "countered";
     let counterAmountVal = null;
 
     if (action === "counter") {
@@ -268,7 +334,9 @@ router.delete("/offers/:id", authMiddleware, async (req, res) => {
       [id, buyerId],
     );
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Offer not found or already resolved." });
+      return res
+        .status(404)
+        .json({ error: "Offer not found or already resolved." });
     }
     res.json({ message: "Offer withdrawn." });
   } catch (err) {
