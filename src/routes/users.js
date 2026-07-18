@@ -87,7 +87,7 @@ router.get("/user/:id/public-profile", async (req, res) => {
     try {
       const countResult = await db.query(
         `SELECT 
-          COUNT(*) FILTER (WHERE moderation_status = 'approved') as active,
+          COUNT(*) FILTER (WHERE moderation_status = 'approved' AND status = 'Available') as active,
           COUNT(*) as total
          FROM userlistings WHERE userid = $1`,
         [id]
@@ -109,7 +109,7 @@ router.get("/user/:id/public-profile", async (req, res) => {
                 c.name as category_name
          FROM userlistings l
          LEFT JOIN categories c ON l.categoryid = c.id
-         WHERE l.userid = $1 AND l.status = 'active' AND l.moderation_status = 'approved'
+         WHERE l.userid = $1 AND l.status = 'Available' AND l.moderation_status = 'approved'
          ORDER BY l.createdat DESC
          LIMIT 12`,
         [id]
