@@ -33,8 +33,15 @@ import emailVerification from "./routes/emailVerification.js";
 import offers from "./routes/offers.js";
 import orders from "./routes/orders.js";
 import db from "./db.js";
-import { sendListingExpiryWarning, sendListingExpired, sendSavedSearchAlert } from "./utils/email.js";
-import { buildNotificationPayload, sendPushToUser } from "./utils/pushNotifications.js";
+import {
+  sendListingExpiryWarning,
+  sendListingExpired,
+  sendSavedSearchAlert,
+} from "./utils/email.js";
+import {
+  buildNotificationPayload,
+  sendPushToUser,
+} from "./utils/pushNotifications.js";
 dotenv.config();
 
 const app = express();
@@ -224,12 +231,18 @@ app.listen(PORT, "0.0.0.0", () => {
            )`,
       );
       for (const row of warnResult.rows) {
-        sendListingExpiryWarning({ name: row.name, email: row.email }, row).catch(() => {});
-        sendPushToUser(row.user_id, buildNotificationPayload('listing_expiry_warning', {
-          title: 'Listing expiring soon',
-          body: `Your listing "${row.title}" will expire in 7 days. Renew it now.`,
-          url: '/dashboard',
-        }));
+        sendListingExpiryWarning(
+          { name: row.name, email: row.email },
+          row,
+        ).catch(() => {});
+        sendPushToUser(
+          row.user_id,
+          buildNotificationPayload("listing_expiry_warning", {
+            title: "Listing expiring soon",
+            body: `Your listing "${row.title}" will expire in 7 days. Renew it now.`,
+            url: "/dashboard",
+          }),
+        );
       }
 
       // 2. Expire listings older than 60 days
@@ -247,23 +260,27 @@ app.listen(PORT, "0.0.0.0", () => {
       );
       for (const row of expiredResult.rows) {
         const userRes = await db.query(
-          `SELECT name, email FROM users WHERE id=$1`, [row.userid],
+          `SELECT name, email FROM users WHERE id=$1`,
+          [row.userid],
         );
         if (userRes.rows.length) {
           const user = userRes.rows[0];
           sendListingExpired(user, row).catch(() => {});
-          sendPushToUser(row.userid, buildNotificationPayload('listing_expired', {
-            title: 'Listing expired',
-            body: `Your listing "${row.title}" has expired. Renew it to relist.`,
-            url: '/dashboard',
-          }));
+          sendPushToUser(
+            row.userid,
+            buildNotificationPayload("listing_expired", {
+              title: "Listing expired",
+              body: `Your listing "${row.title}" has expired. Renew it to relist.`,
+              url: "/dashboard",
+            }),
+          );
         }
       }
       if (expiredResult.rowCount > 0) {
         console.log(`[Expiry] Expired ${expiredResult.rowCount} listings.`);
       }
     } catch (err) {
-      console.error('[Expiry] Cron error:', err.message);
+      console.error("[Expiry] Cron error:", err.message);
     }
   };
 
@@ -271,13 +288,15 @@ app.listen(PORT, "0.0.0.0", () => {
   const runSavedSearchAlerts = async () => {
     try {
       // Get all saved searches with notifications enabled
-      const searchesRes = await db.query(
-        `SELECT ss.id, ss.user_id, ss.name, ss.filters,
+      const searchesRes = await db
+        .query(
+          `SELECT ss.id, ss.user_id, ss.name, ss.filters,
                 u.email, u.name AS user_name
          FROM saved_searches ss
          JOIN users u ON u.id = ss.user_id
          WHERE ss.notify_new_listings = true`,
-      ).catch(() => ({ rows: [] }));
+        )
+        .catch(() => ({ rows: [] }));
 
       for (const search of searchesRes.rows) {
         const f = search.filters;
@@ -321,14 +340,17 @@ app.listen(PORT, "0.0.0.0", () => {
           idx++;
         }
 
-        const matches = await db.query(
-          `SELECT l.id, l.title, l.price, l.currency, l.city, l.country
+        const matches = await db
+          .query(
+            `SELECT l.id, l.title, l.price, l.currency, l.city, l.country
            FROM userlistings l
            WHERE ${where}
            ORDER BY l.createdat DESC
            LIMIT 10`,
-          params,
-        ).then(r => r.rows).catch(() => []);
+            params,
+          )
+          .then((r) => r.rows)
+          .catch(() => []);
 
         if (matches.length > 0) {
           sendSavedSearchAlert(
@@ -338,16 +360,16 @@ app.listen(PORT, "0.0.0.0", () => {
           ).catch(() => {});
           sendPushToUser(
             search.user_id,
-            buildNotificationPayload('saved_search_alert', {
-              title: `${matches.length} new listing${matches.length > 1 ? 's' : ''} for "${search.name}"`,
+            buildNotificationPayload("saved_search_alert", {
+              title: `${matches.length} new listing${matches.length > 1 ? "s" : ""} for "${search.name}"`,
               body: `New matches found for your saved search.`,
-              url: '/market',
+              url: "/market",
             }),
           );
         }
       }
     } catch (err) {
-      console.error('[SavedSearchAlerts] Cron error:', err.message);
+      console.error("[SavedSearchAlerts] Cron error:", err.message);
     }
   };
 
@@ -366,4 +388,27 @@ app.listen(PORT, "0.0.0.0", () => {
   setInterval(runSavedSearchAlerts, 2 * 60 * 60 * 1000);
   // Run once at startup after 30s (to avoid blocking boot)
   setTimeout(runSavedSearchAlerts, 30 * 1000);
+
+  // ─── Stale pending order cleanup (runs every 5 minutes) ───────────────────
+  // MoMo USSD prompts time out in < 2 minutes. Any order stuck in
+  // 'pending' or 'none' for > 5 minutes is definitively abandoned.
+  // Marking them 'failed' unblocks other buyers from purchasing the listing.
+  const runStaleOrderCleanup = async () => {
+    try {
+      const stale = await db.query(
+        `UPDATE orders
+         SET fonlok_status = 'failed', updated_at = NOW()
+         WHERE fonlok_status IN ('pending', 'none')
+           AND created_at < NOW() - INTERVAL '5 minutes'
+         RETURNING id`,
+      );
+      if (stale.rowCount > 0) {
+        console.log(`[StaleOrders] Cleaned up ${stale.rowCount} stale order(s).`);
+      }
+    } catch (err) {
+      console.error("[StaleOrders] Cron error:", err.message);
+    }
+  };
+  setInterval(runStaleOrderCleanup, 5 * 60 * 1000);
+  setTimeout(runStaleOrderCleanup, 60 * 1000); // also run 60s after startup
 });

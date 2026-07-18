@@ -918,4 +918,242 @@ router.put(
   },
 );
 
+// ─── Helper: extract Cloudinary public_id from a CDN URL ─────────────────────
+function extractCloudinaryPublicId(url) {
+  try {
+    const parts = url.split("/upload/");
+    if (parts.length < 2) return null;
+    const afterUpload = parts[1].replace(/^v\d+\//, ""); // strip version
+    return afterUpload.replace(/\.[^.]+$/, ""); // strip extension
+  } catch {
+    return null;
+  }
+}
+
+// ─── PUT /api/listings/:id — full listing edit (owner only) ──────────────────
+// Blocked when an escrow order is active (paid_in_escrow / released / disputed).
+// Editing a live (approved) listing resets it to pending for re-moderation.
+router.put(
+  "/listings/:id",
+  authMiddleware,
+  blockIfSuspended,
+  upload.array("images", 10),
+  async (req, res) => {
+    await ensureListingColumns();
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    try {
+      const listingRes = await db.query(
+        "SELECT id, userid, moderation_status FROM userlistings WHERE id = $1",
+        [id],
+      );
+      if (listingRes.rows.length === 0) {
+        return res.status(404).json({ error: "Listing not found." });
+      }
+      const listing = listingRes.rows[0];
+      if (listing.userid !== userId) {
+        return res.status(403).json({ error: "You can only edit your own listings." });
+      }
+
+      // Block edit when funds are or were held in escrow
+      const activeOrder = await db.query(
+        `SELECT id FROM orders
+         WHERE listing_id = $1
+           AND fonlok_status IN ('paid_in_escrow', 'released', 'disputed')
+         LIMIT 1`,
+        [id],
+      );
+      if (activeOrder.rows.length > 0) {
+        return res.status(409).json({
+          error:
+            "This listing has an active or completed escrow order and cannot be edited.",
+        });
+      }
+
+      const {
+        title,
+        description,
+        price,
+        categoryId,
+        location,
+        country,
+        city,
+        condition,
+        phone,
+        seller_email,
+        tags,
+        delivery_type,
+        delivery_notes,
+        removed_image_ids,
+      } = req.body;
+
+      if (!title || !description || !price || !categoryId || !city) {
+        return res
+          .status(400)
+          .json({ error: "Title, description, price, category, and city are required." });
+      }
+
+      // Delete removed existing images
+      const idsToRemove = removed_image_ids
+        ? Array.isArray(removed_image_ids)
+          ? removed_image_ids
+          : [removed_image_ids]
+        : [];
+      for (const imgId of idsToRemove) {
+        const imgRes = await db.query(
+          "SELECT imageurl FROM imagelistings WHERE id = $1 AND listingid = $2",
+          [imgId, id],
+        );
+        if (imgRes.rows.length > 0) {
+          const publicId = extractCloudinaryPublicId(imgRes.rows[0].imageurl);
+          if (publicId) cloudinary.uploader.destroy(publicId).catch(() => {});
+          await db.query("DELETE FROM imagelistings WHERE id = $1", [imgId]);
+        }
+      }
+
+      // Upload new images
+      if (req.files && req.files.length > 0) {
+        const countRes = await db.query(
+          "SELECT COUNT(*) FROM imagelistings WHERE listingid = $1",
+          [id],
+        );
+        let currentCount = parseInt(countRes.rows[0].count, 10);
+        for (const file of req.files) {
+          try {
+            const result = await new Promise((resolve, reject) => {
+              const stream = cloudinary.uploader.upload_stream(
+                { folder: "marketplace", resource_type: "image" },
+                (err, r) => (err ? reject(err) : resolve(r)),
+              );
+              stream.end(file.buffer);
+            });
+            const isMain = currentCount === 0;
+            await db.query(
+              "INSERT INTO imagelistings (listingid, imageurl, is_main) VALUES ($1, $2, $3)",
+              [id, result.secure_url, isMain],
+            );
+            currentCount++;
+          } catch (uploadErr) {
+            console.warn("[Listings] Edit image upload failed:", uploadErr.message);
+          }
+        }
+      }
+
+      // Parse tags
+      const tagsArray = tags
+        ? typeof tags === "string"
+          ? tags
+              .split(",")
+              .map((t) => t.trim())
+              .filter(Boolean)
+          : tags
+        : [];
+
+      // Editing an approved listing requires re-review
+      const newModerationStatus =
+        listing.moderation_status === "approved" ? "pending" : listing.moderation_status;
+
+      const result = await db.query(
+        `UPDATE userlistings
+         SET title = $1, description = $2, price = $3, categoryid = $4,
+             location = $5, country = $6, city = $7, condition = $8,
+             phone = $9, seller_email = $10, tags = $11,
+             delivery_type = $12, delivery_notes = $13,
+             moderation_status = $14, updatedat = NOW()
+         WHERE id = $15 AND userid = $16
+         RETURNING *`,
+        [
+          title.trim(),
+          description.trim(),
+          parseFloat(price),
+          parseInt(categoryId, 10),
+          location || null,
+          country || "Cameroon",
+          city.trim(),
+          condition || "used",
+          phone || null,
+          seller_email || null,
+          tagsArray,
+          delivery_type || "pickup",
+          delivery_notes || null,
+          newModerationStatus,
+          id,
+          userId,
+        ],
+      );
+
+      const imagesRes = await db.query(
+        "SELECT id, imageurl, is_main FROM imagelistings WHERE listingid = $1 ORDER BY is_main DESC",
+        [id],
+      );
+
+      return res.json({
+        message:
+          listing.moderation_status === "approved"
+            ? "Listing updated and resubmitted for review."
+            : "Listing updated.",
+        listing: { ...result.rows[0], images: imagesRes.rows },
+      });
+    } catch (err) {
+      console.error("[Listings] Edit error:", err.message);
+      return res.status(500).json({ error: "Failed to update listing." });
+    }
+  },
+);
+
+// ─── DELETE /api/listings/:id — delete listing (owner only) ──────────────────
+// Blocked when an escrow order is active or completed.
+router.delete("/listings/:id", authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const listingRes = await db.query(
+      "SELECT id, userid FROM userlistings WHERE id = $1",
+      [id],
+    );
+    if (listingRes.rows.length === 0) {
+      return res.status(404).json({ error: "Listing not found." });
+    }
+    if (listingRes.rows[0].userid !== userId) {
+      return res.status(403).json({ error: "You can only delete your own listings." });
+    }
+
+    const activeOrder = await db.query(
+      `SELECT id FROM orders
+       WHERE listing_id = $1
+         AND fonlok_status IN ('paid_in_escrow', 'released', 'disputed')
+       LIMIT 1`,
+      [id],
+    );
+    if (activeOrder.rows.length > 0) {
+      return res.status(409).json({
+        error: "This listing has an active or completed escrow order and cannot be deleted.",
+      });
+    }
+
+    // Fetch images before deleting so we can clean up Cloudinary
+    const imagesRes = await db.query(
+      "SELECT imageurl FROM imagelistings WHERE listingid = $1",
+      [id],
+    );
+
+    // Delete images from DB first (avoids FK issues), then the listing
+    await db.query("DELETE FROM imagelistings WHERE listingid = $1", [id]);
+    await db.query("DELETE FROM userlistings WHERE id = $1", [id]);
+
+    // Clean up Cloudinary (fire-and-forget)
+    for (const img of imagesRes.rows) {
+      const publicId = extractCloudinaryPublicId(img.imageurl);
+      if (publicId) cloudinary.uploader.destroy(publicId).catch(() => {});
+    }
+
+    return res.json({ message: "Listing deleted." });
+  } catch (err) {
+    console.error("[Listings] Delete error:", err.message);
+    return res.status(500).json({ error: "Failed to delete listing." });
+  }
+});
+
 export default router;

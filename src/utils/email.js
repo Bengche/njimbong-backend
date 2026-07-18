@@ -924,6 +924,32 @@ export async function sendDisputeFiledToAdmin(
   });
 }
 
+// ─── Password reset ─────────────────────────────────────────────────────────
+
+export async function sendPasswordResetEmail(user, token) {
+  const link = `${APP_URL}/reset-password?token=${token}`;
+  const html = wrap(
+    "Reset your password — Njimbong",
+    `
+    <p class="greeting">Reset your password</p>
+    <p class="text">We received a request to reset the password for your Njimbong account. Click the button below to choose a new password.</p>
+    <p style="text-align:center;margin:28px 0;">
+      <a href="${link}" class="btn">Reset Password</a>
+    </p>
+    <p class="text">This link expires in <strong>1 hour</strong>. If you did not request a password reset, you can safely ignore this email — your password will not be changed.</p>
+    <hr class="divider"/>
+    <p class="meta">If the button does not work, copy and paste this link into your browser:<br/>
+      <a href="${link}">${link}</a>
+    </p>
+  `,
+  );
+  await send({
+    to: user.email,
+    subject: "Reset your Njimbong password",
+    html,
+  });
+}
+
 export async function sendDisputeConfirmation(user, listing, orderId) {
   const html = wrap(
     "Dispute Submitted — Njimbong",
