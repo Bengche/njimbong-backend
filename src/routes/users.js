@@ -30,10 +30,10 @@ router.get("/user/:id/public-profile", async (req, res) => {
   try {
     // Get user info with all relevant public data (defensive for optional columns)
     const userColumnsResult = await db.query(
-      "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'"
+      "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'",
     );
     const userColumns = new Set(
-      userColumnsResult.rows.map((row) => row.column_name)
+      userColumnsResult.rows.map((row) => row.column_name),
     );
     const userSelect = [
       "id",
@@ -46,8 +46,8 @@ router.get("/user/:id/public-profile", async (req, res) => {
       userColumns.has("createdat")
         ? "createdat"
         : userColumns.has("created_at")
-        ? "created_at as createdat"
-        : "NOW() as createdat",
+          ? "created_at as createdat"
+          : "NOW() as createdat",
       userColumns.has("is_suspended")
         ? "is_suspended"
         : "false as is_suspended",
@@ -58,7 +58,7 @@ router.get("/user/:id/public-profile", async (req, res) => {
 
     const userResult = await db.query(
       `SELECT ${userSelect.join(", ")} FROM users WHERE id = $1`,
-      [id]
+      [id],
     );
 
     if (userResult.rows.length === 0) {
@@ -72,7 +72,7 @@ router.get("/user/:id/public-profile", async (req, res) => {
     try {
       const kycResult = await db.query(
         `SELECT status FROM kyc_verifications WHERE user_id = $1 ORDER BY submitted_at DESC LIMIT 1`,
-        [id]
+        [id],
       );
       if (kycResult.rows.length > 0) {
         kycStatus = kycResult.rows[0].status;
@@ -90,7 +90,7 @@ router.get("/user/:id/public-profile", async (req, res) => {
           COUNT(*) FILTER (WHERE moderation_status = 'approved' AND status = 'Available') as active,
           COUNT(*) as total
          FROM userlistings WHERE userid = $1`,
-        [id]
+        [id],
       );
       if (countResult.rows.length > 0) {
         activeListings = parseInt(countResult.rows[0].active) || 0;
@@ -112,18 +112,23 @@ router.get("/user/:id/public-profile", async (req, res) => {
          WHERE l.userid = $1 AND l.status = 'Available' AND l.moderation_status = 'approved'
          ORDER BY l.createdat DESC
          LIMIT 12`,
-        [id]
+        [id],
       );
 
-      // Fetch images for each listing
-      for (const listing of listingsResult.rows) {
-        const imagesResult = await db.query(
-          `SELECT imageurl FROM listingimages WHERE listingid = $1 ORDER BY is_main DESC`,
-          [listing.id]
-        );
-        listing.images = imagesResult.rows.map((img) => img.imageurl);
-      }
       listings = listingsResult.rows;
+
+      // Fetch images for each listing
+      for (const listing of listings) {
+        try {
+          const imagesResult = await db.query(
+            `SELECT imageurl FROM imagelistings WHERE listingid = $1 ORDER BY is_main DESC`,
+            [listing.id],
+          );
+          listing.images = imagesResult.rows.map((img) => img.imageurl);
+        } catch {
+          listing.images = [];
+        }
+      }
     } catch (e) {
       console.log("Listings query error:", e.message);
     }
@@ -167,7 +172,7 @@ router.get("/users/me", authMiddleware, async (req, res) => {
   try {
     const result = await db.query(
       "SELECT id, name, email, username, phone, country, profilepictureurl, verified, updatedat FROM users WHERE id = $1",
-      [req.user.id]
+      [req.user.id],
     );
 
     if (result.rows.length === 0) {
@@ -186,7 +191,7 @@ router.get("/user/me", authMiddleware, async (req, res) => {
   try {
     const result = await db.query(
       "SELECT id, name, email, username, phone, country, profilepictureurl, verified, updatedat FROM users WHERE id = $1",
-      [req.user.id]
+      [req.user.id],
     );
 
     if (result.rows.length === 0) {
@@ -207,7 +212,7 @@ router.get("/users/:id", authMiddleware, async (req, res) => {
   try {
     const result = await db.query(
       "SELECT id, name, email, username, phone, country, profilepictureurl, verified, updatedat FROM users WHERE id = $1",
-      [id]
+      [id],
     );
 
     if (result.rows.length === 0) {
@@ -246,7 +251,7 @@ router.put(
             (error, result) => {
               if (error) reject(error);
               else resolve(result);
-            }
+            },
           );
           uploadStream.end(req.file.buffer);
         });
@@ -286,7 +291,7 @@ router.put(
 
       values.push(id);
       const query = `UPDATE users SET ${updates.join(
-        ", "
+        ", ",
       )} WHERE id = $${paramCount} RETURNING id, name, email, username, phone, country, profilepictureurl, verified, updatedat`;
 
       const result = await db.query(query, values);
@@ -303,7 +308,7 @@ router.put(
       console.error("Error updating profile:", error);
       res.status(500).json({ error: "Failed to update profile" });
     }
-  }
+  },
 );
 
 // Update user password
@@ -326,7 +331,7 @@ router.put("/users/:id/password", authMiddleware, async (req, res) => {
     // Get current user password
     const userResult = await db.query(
       "SELECT passwordhash FROM users WHERE id = $1",
-      [id]
+      [id],
     );
 
     if (userResult.rows.length === 0) {
@@ -336,7 +341,7 @@ router.put("/users/:id/password", authMiddleware, async (req, res) => {
     // Verify current password
     const isValidPassword = await bcrypt.compare(
       currentPassword,
-      userResult.rows[0].passwordhash
+      userResult.rows[0].passwordhash,
     );
 
     if (!isValidPassword) {
