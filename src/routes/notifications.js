@@ -45,7 +45,8 @@ router.post("/notifications/unsubscribe", authMiddleware, async (req, res) => {
 // Get user notifications
 router.get("/notifications/:userId", authMiddleware, async (req, res) => {
   const { userId } = req.params;
-  const { limit = 50, offset = 0 } = req.query;
+  const limit = Number(req.query.limit ?? 50);
+  const offset = Number(req.query.offset ?? 0);
 
   try {
     const result = await db.query(
@@ -62,13 +63,21 @@ router.get("/notifications/:userId", authMiddleware, async (req, res) => {
       [userId],
     );
 
+    const totalResult = await db.query(
+      "SELECT COUNT(*) FROM notifications WHERE userid = $1",
+      [userId],
+    );
+
     res.status(200).json({
       notifications: result.rows,
       unreadCount: parseInt(unreadResult.rows[0].count),
+      total: parseInt(totalResult.rows[0].count),
     });
   } catch (error) {
     if (isMissingTableError(error)) {
-      return res.status(200).json({ notifications: [], unreadCount: 0 });
+      return res
+        .status(200)
+        .json({ notifications: [], unreadCount: 0, total: 0 });
     }
     console.error("Error fetching notifications:", error);
     res.status(500).json({ error: "Failed to fetch notifications" });
