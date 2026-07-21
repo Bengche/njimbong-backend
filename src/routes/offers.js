@@ -121,6 +121,21 @@ router.post("/offers", authMiddleware, blockIfSuspended, async (req, res) => {
       { amount: parsedAmount, message: message || null },
     );
 
+    // In-app notification for seller
+    try {
+      await db.query(
+        `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
+         VALUES ($1, 'New offer received', $2, 'offer', $3, 'listing')`,
+        [
+          listing.userid,
+          `${parsedAmount.toLocaleString()} ${listing.currency} offer on "${listing.title}"`,
+          listing_id,
+        ],
+      );
+    } catch (notifErr) {
+      console.error("[Offers] notification insert error:", notifErr.message);
+    }
+
     res.status(201).json({ offer });
   } catch (err) {
     console.error("[Offers] POST error:", err.message);
@@ -173,6 +188,32 @@ router.get("/offers/mine", authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("[Offers] GET mine error:", err.message);
     res.status(500).json({ error: "Failed to fetch your offers." });
+  }
+});
+
+// ─── GET /api/offers/incoming — seller sees all offers on their listings ───────
+router.get("/offers/incoming", authMiddleware, async (req, res) => {
+  await ensureOffersTable();
+  const sellerId = req.user.id;
+  try {
+    const result = await db.query(
+      `SELECT o.*,
+              l.title AS listing_title, l.price AS listing_price,
+              img.imageurl AS listing_image,
+              b.name AS buyer_name, b.profilepictureurl AS buyer_pic
+       FROM offers o
+       JOIN userlistings l ON l.id = o.listing_id
+       LEFT JOIN imagelistings img ON img.listingid = l.id AND img.is_main = true
+       JOIN users b ON b.id = o.buyer_id
+       WHERE o.seller_id = $1
+         AND o.status NOT IN ('expired', 'withdrawn')
+       ORDER BY o.created_at DESC`,
+      [sellerId],
+    );
+    res.json({ offers: result.rows });
+  } catch (err) {
+    console.error("[Offers] GET incoming error:", err.message);
+    res.status(500).json({ error: "Failed to fetch incoming offers." });
   }
 });
 
@@ -311,6 +352,19 @@ router.put("/offers/:id", authMiddleware, async (req, res) => {
         { id: offer.listing_id, title: offer.title, currency: offer.currency },
         { amount: offer.amount },
       );
+      try {
+        await db.query(
+          `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
+           VALUES ($1, 'Offer accepted', $2, 'offer', $3, 'listing')`,
+          [
+            offer.buyer_id,
+            `Your offer on "${offer.title}" was accepted. Complete your purchase now.`,
+            offer.listing_id,
+          ],
+        );
+      } catch (notifErr) {
+        console.error("[Offers] accept notification error:", notifErr.message);
+      }
     } else if (action === "counter") {
       sendPushToUser(
         offer.buyer_id,
@@ -327,6 +381,19 @@ router.put("/offers/:id", authMiddleware, async (req, res) => {
         counterAmountVal,
         offer.currency,
       );
+      try {
+        await db.query(
+          `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
+           VALUES ($1, 'Counter-offer received', $2, 'offer', $3, 'listing')`,
+          [
+            offer.buyer_id,
+            `The seller countered with ${counterAmountVal.toLocaleString()} ${offer.currency} on "${offer.title}".`,
+            offer.listing_id,
+          ],
+        );
+      } catch (notifErr) {
+        console.error("[Offers] counter notification error:", notifErr.message);
+      }
     }
 
     res.json({ message: `Offer ${newStatus}.` });
