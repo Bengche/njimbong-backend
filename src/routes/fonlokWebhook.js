@@ -31,7 +31,10 @@ const _tablesReady = (async () => {
     `);
   } catch (err) {
     // Non-fatal — worst case a retry event is double-processed once
-    console.error("[FonlokWebhook] Could not create processed_webhooks table:", err.message);
+    console.error(
+      "[FonlokWebhook] Could not create processed_webhooks table:",
+      err.message,
+    );
   }
 })();
 
@@ -78,7 +81,10 @@ router.post(
     }
 
     if (!verifyFonlokWebhook(req.body, signatureHeader || "")) {
-      console.warn("[FonlokWebhook] Signature verification failed — event:", headerEventType);
+      console.warn(
+        "[FonlokWebhook] Signature verification failed — event:",
+        headerEventType,
+      );
       return res.status(401).json({ error: "invalid_signature" });
     }
 
@@ -94,7 +100,9 @@ router.post(
     // payment.confirmed uses `invoice_number`; release events use `invoice_id`
     const invoiceId = event.invoice_id || event.invoice_number;
 
-    console.log(`[FonlokWebhook] Received: type=${eventType} invoice=${invoiceId}`);
+    console.log(
+      `[FonlokWebhook] Received: type=${eventType} invoice=${invoiceId}`,
+    );
 
     // ── Respond 200 immediately — Fonlok has an 8-second delivery timeout ──
     res.status(200).json({ received: true });
@@ -109,7 +117,10 @@ router.post(
 // ─── Event dispatcher ─────────────────────────────────────────────────────────
 async function handleFonlokEvent(event, eventType, invoiceId) {
   if (!invoiceId) {
-    console.warn("[FonlokWebhook] Event has no invoice_id — skipping:", eventType);
+    console.warn(
+      "[FonlokWebhook] Event has no invoice_id — skipping:",
+      eventType,
+    );
     return;
   }
 
@@ -144,7 +155,9 @@ async function handleFonlokEvent(event, eventType, invoiceId) {
 async function handlePaymentConfirmed(event, invoiceId) {
   const claimed = await claimEvent(invoiceId, "payment.confirmed");
   if (!claimed) {
-    console.log(`[FonlokWebhook] payment.confirmed duplicate — skipping invoice ${invoiceId}`);
+    console.log(
+      `[FonlokWebhook] payment.confirmed duplicate — skipping invoice ${invoiceId}`,
+    );
     return;
   }
 
@@ -158,7 +171,9 @@ async function handlePaymentConfirmed(event, invoiceId) {
   );
 
   if (rowCount === 0) {
-    console.log(`[FonlokWebhook] payment.confirmed: no updatable order for invoice ${invoiceId}`);
+    console.log(
+      `[FonlokWebhook] payment.confirmed: no updatable order for invoice ${invoiceId}`,
+    );
     return;
   }
 
@@ -166,10 +181,9 @@ async function handlePaymentConfirmed(event, invoiceId) {
   console.log(`[FonlokWebhook] Order ${order.id} → paid_in_escrow`);
 
   // Reserve listing — prevents a second buyer from initiating a concurrent order
-  await db.query(
-    `UPDATE userlistings SET status = 'In Escrow' WHERE id = $1`,
-    [order.listing_id],
-  );
+  await db.query(`UPDATE userlistings SET status = 'In Escrow' WHERE id = $1`, [
+    order.listing_id,
+  ]);
 
   // Fetch details for emails
   try {
@@ -191,7 +205,9 @@ async function handlePaymentConfirmed(event, invoiceId) {
       sendPaymentConfirmedSeller(
         { name: d.seller_name, email: d.seller_contact_email },
         { title: d.title },
-        order.id, d.amount, d.currency,
+        order.id,
+        d.amount,
+        d.currency,
       );
       sendPaymentConfirmedBuyer(
         { name: d.buyer_name, email: d.buyer_email },
@@ -200,7 +216,10 @@ async function handlePaymentConfirmed(event, invoiceId) {
       );
     }
   } catch (err) {
-    console.error("[FonlokWebhook] payment.confirmed email error:", err.message);
+    console.error(
+      "[FonlokWebhook] payment.confirmed email error:",
+      err.message,
+    );
   }
 
   // In-app notifications (run in parallel; individual failures are absorbed)
@@ -230,7 +249,9 @@ async function handlePayoutReleased(event, invoiceId, eventType) {
   // Canonical dedup key shared between both event variants
   const claimed = await claimEvent(invoiceId, "payout.released");
   if (!claimed) {
-    console.log(`[FonlokWebhook] ${eventType} duplicate — skipping invoice ${invoiceId}`);
+    console.log(
+      `[FonlokWebhook] ${eventType} duplicate — skipping invoice ${invoiceId}`,
+    );
     return;
   }
 
@@ -244,25 +265,31 @@ async function handlePayoutReleased(event, invoiceId, eventType) {
   );
 
   if (rowCount === 0) {
-    console.log(`[FonlokWebhook] ${eventType}: no updatable order for invoice ${invoiceId}`);
+    console.log(
+      `[FonlokWebhook] ${eventType}: no updatable order for invoice ${invoiceId}`,
+    );
     return;
   }
 
   const order = rows[0];
-  console.log(`[FonlokWebhook] Order ${order.id} → released (via ${eventType})`);
+  console.log(
+    `[FonlokWebhook] Order ${order.id} → released (via ${eventType})`,
+  );
 
   // Permanently mark listing as sold — it should no longer appear as available
-  await db.query(
-    `UPDATE userlistings SET status = 'Sold' WHERE id = $1`,
-    [order.listing_id],
-  );
+  await db.query(`UPDATE userlistings SET status = 'Sold' WHERE id = $1`, [
+    order.listing_id,
+  ]);
 
   // Prefer Fonlok's exact payout figures from the payload; compute from order as fallback
   const grossAmount = Number(event.gross_amount ?? order.amount);
-  const platformFee = Number(event.platform_fee  ?? Math.round(grossAmount * 0.03));
-  const netAmount   = Number(event.seller_receives ?? (grossAmount - platformFee));
-  const currency    = event.currency ?? order.currency;
-  const frontendUrl = process.env.FRONTEND_URL?.split(",")[0].trim() || "https://njimbong.com";
+  const platformFee = Number(
+    event.platform_fee ?? Math.round(grossAmount * 0.03),
+  );
+  const netAmount = Number(event.seller_receives ?? grossAmount - platformFee);
+  const currency = event.currency ?? order.currency;
+  const frontendUrl =
+    process.env.FRONTEND_URL?.split(",")[0].trim() || "https://njimbong.com";
 
   // Fetch user and listing details for emails
   try {
@@ -283,17 +310,25 @@ async function handlePayoutReleased(event, invoiceId, eventType) {
       const d = details[0];
       // Seller reviews the buyer; buyer reviews the seller
       const sellerReviewLink = `${frontendUrl}/profile/${d.buyer_id}`;
-      const buyerReviewLink  = `${frontendUrl}/profile/${d.seller_id}`;
+      const buyerReviewLink = `${frontendUrl}/profile/${d.seller_id}`;
 
       sendPaymentReleasedSeller(
         { name: d.seller_name, email: d.seller_contact_email },
         { title: d.title },
-        order.id, grossAmount, netAmount, platformFee, currency, sellerReviewLink,
+        order.id,
+        grossAmount,
+        netAmount,
+        platformFee,
+        currency,
+        sellerReviewLink,
       );
       sendPaymentReleasedBuyer(
         { name: d.buyer_name, email: d.buyer_email },
         { title: d.title },
-        order.id, grossAmount, currency, buyerReviewLink,
+        order.id,
+        grossAmount,
+        currency,
+        buyerReviewLink,
       );
     }
   } catch (err) {

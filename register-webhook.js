@@ -15,7 +15,10 @@
  */
 
 import "dotenv/config";
-import { registerFonlokWebhook, listFonlokWebhooks } from "./src/services/fonlok.js";
+import {
+  registerFonlokWebhook,
+  listFonlokWebhooks,
+} from "./src/services/fonlok.js";
 
 const WEBHOOK_URL =
   process.env.FONLOK_WEBHOOK_URL ||
@@ -45,6 +48,9 @@ IMPORTANT: Set this in Railway (njimbong-backend):
 `);
   }
 })().catch((err) => {
-  console.error("Failed to register webhook:", err.response?.data || err.message);
+  console.error(
+    "Failed to register webhook:",
+    err.response?.data || err.message,
+  );
   process.exit(1);
 });

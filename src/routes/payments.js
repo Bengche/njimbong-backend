@@ -155,13 +155,7 @@ router.post(
             fonlok_status, order_reference)
          VALUES ($1, $2, $3, $4, 'XAF', 'none', $5)
          RETURNING id`,
-        [
-          listing_id,
-          buyer_id,
-          listing.seller_id,
-          agreedAmount,
-          orderId,
-        ],
+        [listing_id, buyer_id, listing.seller_id, agreedAmount, orderId],
       );
       dbOrderId = orderResult.rows[0].id;
 
