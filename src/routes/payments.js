@@ -62,7 +62,7 @@ router.post(
     // row.  Any other concurrent initiation for the same listing will block
     // until this transaction commits, then fail the active-order check below.
     // ─────────────────────────────────────────────────────────────────────────
-    let listing, dbOrderId, orderId;
+    let listing, dbOrderId, orderId, agreedAmount;
     const client = await db.connect();
     try {
       await client.query("BEGIN");
@@ -132,6 +132,19 @@ router.post(
         });
       }
 
+      // Check for an accepted offer from this buyer — use that price if available.
+      // This ensures buyers who negotiated a price pay what was agreed, not the list price.
+      const offerRes = await client.query(
+        `SELECT amount FROM offers
+         WHERE listing_id = $1 AND buyer_id = $2 AND status = 'accepted'
+         ORDER BY updated_at DESC LIMIT 1`,
+        [listing_id, buyer_id],
+      );
+      agreedAmount =
+        offerRes.rows.length > 0
+          ? Math.round(Number(offerRes.rows[0].amount))
+          : Math.round(Number(listing.price));
+
       // Insert a placeholder order ('none') to claim this slot before releasing
       // the lock.  If the Fonlok call fails, we mark it 'initiation_failed' so
       // the next buyer can try.
@@ -146,7 +159,7 @@ router.post(
           listing_id,
           buyer_id,
           listing.seller_id,
-          Math.round(Number(listing.price)),
+          agreedAmount,
           orderId,
         ],
       );
@@ -190,7 +203,7 @@ router.post(
       const invoice = await withRetry(() =>
         createFonlokInvoice({
           title: listing.title,
-          amount: Math.round(Number(listing.price)),
+          amount: agreedAmount,
           sellerName: listing.seller_name,
           sellerEmail: listing.seller_email,
           sellerPhone: normalisedSellerPhone,
