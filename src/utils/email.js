@@ -451,7 +451,7 @@ export async function sendPaymentConfirmedSeller(
   currency,
 ) {
   const formattedAmount = Number(amount).toLocaleString("en-US");
-  const formattedNet = (Number(amount) * 0.98).toLocaleString("en-US", {
+  const formattedNet = (Number(amount) * 0.97).toLocaleString("en-US", {
     maximumFractionDigits: 0,
   });
   const dashboardLink = `${APP_URL}/dashboard`;
@@ -480,7 +480,7 @@ export async function sendPaymentConfirmedSeller(
       </p>
     </div>
 
-    <p class="text" style="color:#374151;">The buyer's payment of <strong>${formattedAmount} ${currency}</strong> is held securely by Fonlok. Fonlok will deduct their standard 2% platform fee at the time of payout, and the remaining <strong>≈ ${formattedNet} ${currency}</strong> will be sent directly to your Mobile Money number.</p>
+    <p class="text" style="color:#374151;">The buyer's payment of <strong>${formattedAmount} ${currency}</strong> is held securely by Fonlok. Fonlok will deduct the standard 3% platform fee at the time of payout, and the remaining <strong>≈ ${formattedNet} ${currency}</strong> will be sent directly to your Mobile Money number.</p>
 
     <p style="text-align:center;margin:28px 0;">
       <a href="${dashboardLink}" class="btn">View Order on Dashboard</a>
@@ -509,11 +509,15 @@ export async function sendPaymentReleasedSeller(
   currency,
   reviewLink,
 ) {
-  const fmtGross = Number(grossAmount).toLocaleString("en-US");
-  const fmtNet = Number(netAmount).toLocaleString("en-US", {
+  const gross = Number(grossAmount);
+  const normalizedFee = Math.round(gross * 0.03);
+  const normalizedNet = gross - normalizedFee;
+
+  const fmtGross = gross.toLocaleString("en-US");
+  const fmtNet = normalizedNet.toLocaleString("en-US", {
     maximumFractionDigits: 0,
   });
-  const fmtFee = Number(fee).toLocaleString("en-US", {
+  const fmtFee = normalizedFee.toLocaleString("en-US", {
     maximumFractionDigits: 0,
   });
   const html = wrap(

@@ -184,12 +184,10 @@ async function handleFonlokEvent(event) {
         if (detailsRes.rows.length > 0) {
           const d = detailsRes.rows[0];
 
-          // Prefer Fonlok's actual payout figures from the event payload
-          const grossAmount = event.gross_amount ?? Number(d.amount);
-          const platformFee =
-            event.platform_fee ?? Math.round(Number(d.amount) * 0.02);
-          const netAmount =
-            event.seller_receives ?? Math.round(Number(d.amount) * 0.98);
+          // Keep email payout display consistent with Njimbong's 3% fee policy.
+          const grossAmount = Number(event.gross_amount ?? d.amount);
+          const platformFee = Math.round(grossAmount * 0.03);
+          const netAmount = grossAmount - platformFee;
           const currency = event.currency ?? d.currency;
 
           // Buyer reviews the seller; seller reviews the buyer
