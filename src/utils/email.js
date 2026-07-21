@@ -14,6 +14,9 @@ const FROM = "Njimbong <support@njimbong.com>";
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "support@njimbong.com";
 const APP_URL =
   process.env.FRONTEND_URL?.split(",")[0].trim() || "https://njimbong.com";
+const BRAND_LOGO_URL =
+  process.env.EMAIL_LOGO_URL?.trim() ||
+  "https://www.njimbong.com/icon-192x192.png";
 
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -69,7 +72,7 @@ const wrap = (title, body) => `<!DOCTYPE html>
 <div class="wrapper">
   <div class="card">
     <div class="header">
-      <img src="${APP_URL}/icon-192x192.png" alt="Njimbong"/>
+      <img src="${BRAND_LOGO_URL}" alt="Njimbong"/>
       <div class="header-brand">Njimbong</div>
     </div>
     <div class="body">
