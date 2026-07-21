@@ -102,6 +102,34 @@ export async function getFonlokInvoice(invoiceId) {
 }
 
 /**
+ * Register a webhook endpoint with Fonlok.
+ * Call once during setup; store the returned `secret` as FONLOK_WEBHOOK_SECRET.
+ * @param {string} url - Publicly accessible HTTPS URL (e.g. https://njimbong-backend-production.up.railway.app/webhooks/fonlok)
+ * @returns {{ id, url, secret, active, created_at }}
+ */
+export async function registerFonlokWebhook(url) {
+  console.log("[Fonlok] Registering webhook:", url);
+  const { data } = await client.post("/v1/webhooks/register", { url });
+  console.log("[Fonlok] Webhook registered:", JSON.stringify(data));
+  return data; // { id, url, secret, active, created_at }
+}
+
+/** List all registered webhook endpoints. */
+export async function listFonlokWebhooks() {
+  const { data } = await client.get("/v1/webhooks");
+  return data;
+}
+
+/**
+ * Delete a registered webhook by its Fonlok webhook ID.
+ * @param {string} webhookId
+ */
+export async function deleteFonlokWebhook(webhookId) {
+  const { data } = await client.delete(`/v1/webhooks/${webhookId}`);
+  return data;
+}
+
+/**
  * Verify an incoming webhook signature.
  * Must be called before trusting any event payload.
  * @param {Buffer} rawBody - The raw request body bytes (not parsed JSON).
