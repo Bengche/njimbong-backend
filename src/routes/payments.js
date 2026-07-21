@@ -9,6 +9,10 @@ import {
   releaseFonlokPayment,
   disputeFonlokPayment,
 } from "../services/fonlok.js";
+import {
+  sendPaymentReleasedSeller,
+  sendPaymentReleasedBuyer,
+} from "../utils/email.js";
 
 const router = express.Router();
 
@@ -393,9 +397,30 @@ router.post("/payments/release", authMiddleware, async (req, res) => {
     return res.status(400).json({ error: "order_id is required." });
 
   try {
+    // ── 1. Fetch full order + listing + user details ─────────────────────────
     const orderResult = await db.query(
-      `SELECT id, fonlok_invoice_id, fonlok_status, buyer_id, seller_id
-       FROM orders WHERE id = $1`,
+      `SELECT
+         o.id,
+         o.order_reference,
+         o.fonlok_invoice_id,
+         o.fonlok_status,
+         o.amount,
+         o.currency,
+         o.buyer_id,
+         o.seller_id,
+         o.listing_id,
+         l.title       AS listing_title,
+         l.city        AS listing_city,
+         l.country     AS listing_country,
+         b.name        AS buyer_name,
+         b.email       AS buyer_email,
+         s.name        AS seller_name,
+         s.email       AS seller_email
+       FROM orders o
+       LEFT JOIN userlistings l  ON l.id  = o.listing_id
+       LEFT JOIN users        b  ON b.id  = o.buyer_id
+       LEFT JOIN users        s  ON s.id  = o.seller_id
+       WHERE o.id = $1`,
       [order_id],
     );
 
@@ -415,24 +440,91 @@ router.post("/payments/release", authMiddleware, async (req, res) => {
           "Funds can only be released after payment is confirmed in escrow.",
       });
 
+    // ── 2. Call Fonlok to release funds ──────────────────────────────────────
     const release = await releaseFonlokPayment(order.fonlok_invoice_id);
 
+    const grossAmount   = Number(order.amount);
+    const platformFee   = release.platform_fee  ?? Math.round(grossAmount * 0.03);
+    const sellerReceives = release.seller_receives ?? (grossAmount - platformFee);
+
+    // ── 3. Update order status ────────────────────────────────────────────────
     await db.query(
       `UPDATE orders SET fonlok_status = 'released', updated_at = NOW() WHERE id = $1`,
       [order_id],
     );
 
-    // Notify seller
+    // ── 4. Mark listing as Sold ───────────────────────────────────────────────
+    await db.query(
+      `UPDATE userlistings SET status = 'Sold', updatedat = NOW() WHERE id = $1`,
+      [order.listing_id],
+    );
+
+    // ── 5. Record analytics event + upsert daily revenue for seller ──────────
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    await Promise.all([
+      db.query(
+        `INSERT INTO analytics_events
+           (listing_id, user_id, event_type, source)
+         VALUES ($1, $2, 'sale', 'escrow')`,
+        [order.listing_id, order.seller_id],
+      ),
+      db.query(
+        `INSERT INTO user_analytics_daily
+           (user_id, date, revenue)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (user_id, date)
+         DO UPDATE SET revenue = user_analytics_daily.revenue + EXCLUDED.revenue`,
+        [order.seller_id, today, sellerReceives],
+      ),
+    ]);
+
+    // ── 6. In-app notifications ───────────────────────────────────────────────
+    const APP_URL = process.env.APP_URL || "https://njimbong.com";
+    const reviewLink = `${APP_URL}/profile/${order.buyer_id}`;
+
     await db.query(
       `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
-       VALUES ($1, 'Payment released', 'The buyer has confirmed receipt. Funds have been sent to your MoMo number.', 'payment', $2, 'order')`,
-      [order.seller_id, order_id],
+       VALUES
+         ($1, 'Payment released', 'The buyer has confirmed receipt. Your payout has been dispatched to your MoMo number.', 'payment', $2, 'order'),
+         ($3, 'Purchase complete', 'You released funds for "${order.listing_title}". The transaction is now complete.', 'payment', $2, 'order')`,
+      [order.seller_id, order_id, order.buyer_id],
+    );
+
+    // ── 7. Emails (fire-and-forget) ───────────────────────────────────────────
+    const listing = {
+      title: order.listing_title,
+      city: order.listing_city,
+      country: order.listing_country,
+    };
+
+    sendPaymentReleasedSeller(
+      { name: order.seller_name, email: order.seller_email },
+      listing,
+      order.order_reference,
+      grossAmount,
+      sellerReceives,
+      platformFee,
+      order.currency,
+      reviewLink,
+    ).catch((e) =>
+      console.error("[Payments] seller release email error:", e.message),
+    );
+
+    sendPaymentReleasedBuyer(
+      { name: order.buyer_name, email: order.buyer_email },
+      listing,
+      order.order_reference,
+      grossAmount,
+      order.currency,
+      `${APP_URL}/profile/${order.seller_id}`,
+    ).catch((e) =>
+      console.error("[Payments] buyer release email error:", e.message),
     );
 
     return res.json({
       status: "released",
-      seller_receives: release.seller_receives,
-      platform_fee: release.platform_fee,
+      seller_receives: sellerReceives,
+      platform_fee: platformFee,
       message: release.message,
     });
   } catch (err) {
