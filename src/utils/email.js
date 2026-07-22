@@ -25,67 +25,148 @@ if (process.env.SENDGRID_API_KEY) {
 }
 
 // ─── Shared layout ────────────────────────────────────────────────────────────
+// Table-based shell — required for Outlook, Apple Mail, and older Gmail clients.
+// Every structural element uses both a CSS class AND inline styles as fallbacks
+// because many email clients strip <style> blocks.
 
 const wrap = (title, body) => `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+  <meta name="x-apple-disable-message-reformatting"/>
   <title>${title}</title>
+  <!--[if mso]>
+  <xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
+  <![endif]-->
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #18181b; }
-    .wrapper { max-width: 600px; margin: 40px auto; padding: 0 16px 40px; }
-    .card { background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
-    .header { background: linear-gradient(135deg, #16a34a 0%, #065f46 100%); padding: 32px 40px; text-align: center; }
-    .header img { height: 48px; width: 48px; border-radius: 10px; }
-    .header-brand { color: #ffffff; font-size: 22px; font-weight: 700; margin-top: 12px; letter-spacing: -0.3px; }
-    .body { padding: 40px; }
-    .greeting { font-size: 20px; font-weight: 600; color: #18181b; margin-bottom: 16px; }
-    .text { font-size: 15px; line-height: 1.65; color: #3f3f46; margin-bottom: 16px; }
-    .btn { display: inline-block; background: #16a34a; color: #ffffff !important; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 15px; font-weight: 600; margin: 8px 0 24px; }
-    .btn-outline { display: inline-block; border: 1.5px solid #d1d5db; color: #374151 !important; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-size: 14px; font-weight: 500; margin: 4px 0 24px; }
-    .divider { border: none; border-top: 1px solid #e4e4e7; margin: 28px 0; }
-    .meta { font-size: 13px; color: #71717a; line-height: 1.6; }
-    .meta a { color: #16a34a; text-decoration: none; }
-    .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; }
-    .badge-green { background: #dcfce7; color: #15803d; }
-    .badge-red { background: #fee2e2; color: #b91c1c; }
-    .badge-amber { background: #fef3c7; color: #92400e; }
-    .info-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px 20px; margin: 20px 0; }
-    .info-box-red { background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; padding: 16px 20px; margin: 20px 0; }
-    .info-box-amber { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 16px 20px; margin: 20px 0; }
-    .info-row { display: flex; gap: 8px; margin-bottom: 8px; font-size: 14px; }
-    .info-label { color: #71717a; min-width: 110px; flex-shrink: 0; }
-    .info-value { color: #18181b; font-weight: 500; word-break: break-all; }
-    .footer { text-align: center; padding: 24px 40px; }
-    .footer-text { font-size: 12px; color: #a1a1aa; line-height: 1.6; }
-    .footer-text a { color: #a1a1aa; text-decoration: underline; }
-    @media (max-width: 480px) {
-      .body { padding: 28px 24px; }
-      .header { padding: 28px 24px; }
-      .footer { padding: 20px 24px; }
+    /* ── Resets ─────────────────────────────────────────────────── */
+    html, body   { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+    *            { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td    { border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img          { border: 0; display: block; height: auto; max-width: 100%; outline: none; }
+    /* Gmail blue-link override */
+    u + #body a  { color: inherit; text-decoration: none; }
+
+    body { background-color: #eef0ee; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #111827; }
+
+    /* ── Header ─────────────────────────────────────────────────── */
+    .eml-header  { background: linear-gradient(135deg, #16a34a 0%, #064e3b 100%); padding: 32px 40px 28px; text-align: center; }
+    .logo-mark   { display: inline-block; width: 54px; height: 54px; background: rgba(255,255,255,0.18); border-radius: 14px; line-height: 54px; text-align: center; font-size: 28px; font-weight: 900; color: #ffffff; letter-spacing: -1px; }
+    .brand-name  { color: #ffffff; font-size: 22px; font-weight: 700; margin-top: 10px; letter-spacing: -0.5px; }
+
+    /* ── Content ────────────────────────────────────────────────── */
+    .eml-body     { background: #ffffff; padding: 36px 40px; }
+    .greeting     { font-size: 18px; font-weight: 700; color: #111827; margin: 0 0 16px; line-height: 1.4; }
+    .text         { font-size: 15px; line-height: 1.75; color: #374151; margin: 0 0 16px; }
+    .text a       { color: #16a34a; text-decoration: underline; }
+
+    /* ── Buttons ─────────────────────────────────────────────────── */
+    .btn-row      { padding: 8px 0 24px; text-align: center; }
+    .btn          { display: inline-block; background-color: #16a34a; color: #ffffff !important; text-decoration: none !important; padding: 13px 32px; border-radius: 8px; font-size: 15px; font-weight: 600; line-height: 1.2; mso-padding-alt: 0; }
+    .btn-outline  { display: inline-block; border: 1.5px solid #d1d5db; background-color: #ffffff; color: #374151 !important; text-decoration: none !important; padding: 11px 28px; border-radius: 8px; font-size: 14px; font-weight: 500; line-height: 1.2; }
+    .btn-blue     { display: inline-block; background-color: #0369a1; color: #ffffff !important; text-decoration: none !important; padding: 11px 28px; border-radius: 8px; font-size: 14px; font-weight: 600; line-height: 1.2; }
+
+    /* ── Divider ─────────────────────────────────────────────────── */
+    .divider      { border: none; border-top: 1px solid #e5e7eb; margin: 24px 0; }
+
+    /* ── Meta / footnote ─────────────────────────────────────────── */
+    .meta         { font-size: 13px; color: #9ca3af; line-height: 1.75; margin: 0; }
+    .meta a       { color: #6b7280; text-decoration: underline; }
+
+    /* ── Badges ──────────────────────────────────────────────────── */
+    .badge        { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; }
+    .badge-green  { background: #dcfce7; color: #15803d; }
+    .badge-red    { background: #fee2e2; color: #b91c1c; }
+    .badge-amber  { background: #fef3c7; color: #92400e; }
+    .badge-blue   { background: #dbeafe; color: #1d4ed8; }
+
+    /* ── Info boxes ──────────────────────────────────────────────── */
+    .info-box       { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 20px; margin: 20px 0; }
+    .info-box-red   { background: #fff1f2; border: 1px solid #fecdd3; border-radius: 10px; padding: 20px; margin: 20px 0; }
+    .info-box-amber { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 20px; margin: 20px 0; }
+    .info-box-blue  { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 20px; margin: 20px 0; }
+
+    /* ── Info rows — inline-block, email-safe (no flex) ─────────── */
+    .info-row         { font-size: 14px; padding: 7px 0; border-bottom: 1px solid rgba(0,0,0,0.05); overflow: hidden; }
+    .info-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .info-label       { display: inline-block; width: 128px; vertical-align: top; padding-right: 8px; color: #6b7280; font-size: 13px; font-weight: 400; }
+    .info-value       { display: inline-block; vertical-align: top; color: #111827; font-weight: 600; word-break: break-word; max-width: calc(100% - 136px); }
+
+    /* ── Footer ──────────────────────────────────────────────────── */
+    .eml-footer   { background: #f9fafb; border-top: 1px solid #e5e7eb; padding: 22px 40px; text-align: center; }
+    .footer-text  { font-size: 12px; color: #9ca3af; line-height: 1.8; margin: 0; }
+    .footer-text a { color: #9ca3af; text-decoration: underline; }
+
+    /* ── Mobile ──────────────────────────────────────────────────── */
+    @media only screen and (max-width: 620px) {
+      .eml-header    { padding: 24px 20px 20px !important; }
+      .eml-body      { padding: 24px 20px !important; }
+      .eml-footer    { padding: 18px 20px !important; }
+      .greeting      { font-size: 16px !important; }
+      .text          { font-size: 14px !important; }
+      .info-box,
+      .info-box-red,
+      .info-box-amber,
+      .info-box-blue { padding: 14px 14px !important; }
+      .info-label    { width: 108px !important; }
+      .info-value    { max-width: calc(100% - 116px) !important; }
+      .btn           { display: block !important; text-align: center !important; width: auto !important; }
+    }
+    @media only screen and (max-width: 400px) {
+      .info-label  { display: block !important; width: 100% !important; max-width: 100% !important; padding-right: 0 !important; padding-bottom: 2px !important; }
+      .info-value  { display: block !important; max-width: 100% !important; }
     }
   </style>
 </head>
-<body>
-<div class="wrapper">
-  <div class="card">
-    <div class="header">
-      <img src="${BRAND_LOGO_URL}" alt="Njimbong"/>
-      <div class="header-brand">Njimbong</div>
-    </div>
-    <div class="body">
-      ${body}
-    </div>
-  </div>
-  <div class="footer">
-    <p class="footer-text">
-      This email was sent by Njimbong Marketplace &mdash; The Trusted Marketplace in Cameroon.<br/>
-      <a href="${APP_URL}">njimbong.com</a> &middot; <a href="mailto:support@njimbong.com">support@njimbong.com</a>
-    </p>
-  </div>
-</div>
+<!-- id="body" allows Gmail's blue-link u+ selector above to target the body -->
+<body id="body" style="margin:0;padding:0;background-color:#eef0ee;">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#eef0ee;width:100%;">
+  <tr>
+    <td align="center" style="padding:32px 16px 48px;">
+
+      <!--[if mso]>
+      <table width="600" cellpadding="0" cellspacing="0"><tr><td>
+      <![endif]-->
+
+      <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
+             style="max-width:600px;width:100%;border-radius:14px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);background:#ffffff;">
+
+        <!-- Header -->
+        <tr>
+          <td class="eml-header" style="background:linear-gradient(135deg,#16a34a 0%,#064e3b 100%);padding:32px 40px 28px;text-align:center;">
+            <div class="logo-mark" style="display:inline-block;width:54px;height:54px;background:rgba(255,255,255,0.18);border-radius:14px;line-height:54px;text-align:center;font-size:28px;font-weight:900;color:#ffffff;">N</div>
+            <div class="brand-name" style="color:#ffffff;font-size:22px;font-weight:700;margin-top:10px;letter-spacing:-0.5px;">Njimbong</div>
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td class="eml-body" style="background:#ffffff;padding:36px 40px;">
+            ${body}
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td class="eml-footer" style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:22px 40px;text-align:center;">
+            <p class="footer-text" style="font-size:12px;color:#9ca3af;line-height:1.8;margin:0;">
+              This email was sent by <strong style="color:#6b7280;">Njimbong Marketplace</strong> &mdash; The Trusted Marketplace in Cameroon.<br/>
+              <a href="${APP_URL}" style="color:#9ca3af;text-decoration:underline;">njimbong.com</a>
+              &nbsp;&middot;&nbsp;
+              <a href="mailto:support@njimbong.com" style="color:#9ca3af;text-decoration:underline;">support@njimbong.com</a>
+            </p>
+          </td>
+        </tr>
+
+      </table>
+
+      <!--[if mso]></td></tr></table><![endif]-->
+
+    </td>
+  </tr>
+</table>
 </body>
 </html>`;
 
@@ -544,12 +625,10 @@ export async function sendPaymentReleasedSeller(
 
     <p class="text">Please check your Mobile Money balance to confirm receipt of <strong>${fmtNet} ${currency}</strong>. If you do not see it within 24 hours, contact <a href="mailto:support@fonlok.com" style="color:#16a34a;">support@fonlok.com</a> with your order reference.</p>
 
-    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px 20px;margin:20px 0;">
-      <p style="font-size:14px;font-weight:700;color:#0369a1;margin-bottom:8px;">Leave a Review for Your Buyer</p>
-      <p style="font-size:14px;color:#374151;line-height:1.7;">Help build trust on Njimbong by sharing your experience with this buyer. Reviews are visible to the entire community.</p>
-      <p style="text-align:center;margin-top:14px;">
-        <a href="${reviewLink}" style="display:inline-block;background:#0369a1;color:#ffffff !important;text-decoration:none;padding:11px 28px;border-radius:8px;font-size:14px;font-weight:600;">Leave a Review</a>
-      </p>
+    <div class="info-box-blue" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:20px;margin:20px 0;">
+      <p style="font-size:14px;font-weight:700;color:#0369a1;margin:0 0 8px;">Leave a Review for Your Buyer</p>
+      <p style="font-size:14px;color:#374151;line-height:1.7;margin:0 0 14px;">Help build trust on Njimbong by sharing your experience with this buyer. Reviews are visible to the entire community.</p>
+      <p style="text-align:center;margin:0;"><a href="${reviewLink}" class="btn-blue" style="display:inline-block;background-color:#0369a1;color:#ffffff !important;text-decoration:none;padding:11px 28px;border-radius:8px;font-size:14px;font-weight:600;">Leave a Review</a></p>
     </div>
 
     <p style="text-align:center;margin:28px 0;">
@@ -596,12 +675,10 @@ export async function sendPaymentReleasedBuyer(
       <div class="info-row"><span class="info-label">Status</span><span class="info-value"><span class="badge badge-green">Complete</span></span></div>
     </div>
 
-    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px 20px;margin:20px 0;">
-      <p style="font-size:14px;font-weight:700;color:#0369a1;margin-bottom:8px;">Share Your Experience</p>
-      <p style="font-size:14px;color:#374151;line-height:1.7;">How was your experience with this seller? Your honest review helps other buyers make confident decisions and rewards trustworthy sellers on Njimbong.</p>
-      <p style="text-align:center;margin-top:14px;">
-        <a href="${reviewLink}" style="display:inline-block;background:#0369a1;color:#ffffff !important;text-decoration:none;padding:11px 28px;border-radius:8px;font-size:14px;font-weight:600;">Review the Seller</a>
-      </p>
+    <div class="info-box-blue" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:20px;margin:20px 0;">
+      <p style="font-size:14px;font-weight:700;color:#0369a1;margin:0 0 8px;">Share Your Experience</p>
+      <p style="font-size:14px;color:#374151;line-height:1.7;margin:0 0 14px;">How was your experience with this seller? Your honest review helps other buyers make confident decisions and rewards trustworthy sellers on Njimbong.</p>
+      <p style="text-align:center;margin:0;"><a href="${reviewLink}" class="btn-blue" style="display:inline-block;background-color:#0369a1;color:#ffffff !important;text-decoration:none;padding:11px 28px;border-radius:8px;font-size:14px;font-weight:600;">Review the Seller</a></p>
     </div>
 
     <p style="text-align:center;margin:28px 0;">
@@ -818,7 +895,7 @@ export async function sendListingExpired(user, listing) {
       <div class="info-row"><span class="info-label">Listing</span><span class="info-value">${listing.title}</span></div>
       <div class="info-row"><span class="info-label">Price</span><span class="info-value">${Number(listing.price).toLocaleString("en-US")} ${listing.currency}</span></div>
     </div>
-    <a class="btn" href="${renewLink}">Renew Listing</a>
+    <p style="text-align:center;margin:20px 0 24px;"><a class="btn" href="${renewLink}">Renew Listing</a></p>
     <hr class="divider"/>
     <p class="meta">Renewing is free and takes one click. Your listing returns to the top of search results.</p>
   `,
@@ -846,7 +923,7 @@ export async function sendPriceDropAlert(user, listing, oldPrice, newPrice) {
       <div class="info-row"><span class="info-label">New Price</span><span class="info-value">${Number(newPrice).toLocaleString("en-US")} ${listing.currency}</span></div>
       <div class="info-row"><span class="info-label">Saving</span><span class="info-value">${drop}% off</span></div>
     </div>
-    <a class="btn" href="${listingLink}">View Listing</a>
+    <p style="text-align:center;margin:20px 0 24px;"><a class="btn" href="${listingLink}">View Listing</a></p>
     <hr class="divider"/>
     <p class="meta">You saved this item to your wishlist. <a href="${APP_URL}/favorites">Manage wishlist</a></p>
   `,
@@ -873,8 +950,8 @@ export async function sendNewListingFromFollowed(user, seller, listing) {
       <div class="info-row"><span class="info-label">Price</span><span class="info-value">${Number(listing.price).toLocaleString("en-US")} ${listing.currency}</span></div>
       <div class="info-row"><span class="info-label">Location</span><span class="info-value">${listing.city}, ${listing.country}</span></div>
     </div>
-    <a class="btn" href="${listingLink}">View Listing</a>
-    <a class="btn-outline" href="${sellerLink}">View Seller Profile</a>
+    <p style="text-align:center;margin:20px 0 10px;"><a class="btn" href="${listingLink}">View Listing</a></p>
+    <p style="text-align:center;margin:0 0 24px;"><a class="btn-outline" href="${sellerLink}">View Seller Profile</a></p>
     <hr class="divider"/>
     <p class="meta">You're following ${seller.name}. <a href="${APP_URL}/profile/${seller.id}">Unfollow</a></p>
   `,
