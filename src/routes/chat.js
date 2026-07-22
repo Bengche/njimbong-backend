@@ -57,6 +57,47 @@ const upload = multer({
   },
 });
 
+// Configure multer for audio uploads (voice notes — max 10 MB)
+const audioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith("audio/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only audio files are allowed"));
+    }
+  },
+});
+
+// Configure multer for video uploads (max 90 s clip — capped at 50 MB)
+const videoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith("video/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only video files are allowed"));
+    }
+  },
+});
+
+// ── One-time DB column migration ──────────────────────────────────────────────
+let _mediaCols = false;
+async function ensureMediaColumns() {
+  if (_mediaCols) return;
+  await db.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS audio_url          TEXT`);
+  await db.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS video_url          TEXT`);
+  await db.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS video_thumbnail_url TEXT`);
+  await db.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_duration     INTEGER`);
+  _mediaCols = true;
+}
+// Kick off migration immediately on module load
+ensureMediaColumns().catch((e) =>
+  console.error("[Chat] media column migration:", e.message),
+);
+
 // Helper function to get conversation details
 async function getConversationDetails(conversationId, userId) {
   const result = await db.query(
@@ -470,6 +511,10 @@ router.get(
           m.content,
           m.image_url,
           m.image_thumbnail_url,
+          m.audio_url,
+          m.video_url,
+          m.video_thumbnail_url,
+          m.media_duration,
           m.status,
           m.is_edited,
           m.is_deleted,
@@ -835,6 +880,254 @@ router.post(
     } catch (error) {
       console.error("Error sending image:", error);
       res.status(500).json({ error: "Failed to send image" });
+    }
+  },
+);
+
+// =====================================================
+// POST: Send an audio (voice note) message
+// =====================================================
+router.post(
+  "/chat/conversations/:conversationId/audio",
+  authMiddleware,
+  blockIfSuspended,
+  audioUpload.single("audio"),
+  async (req, res) => {
+    const userId = req.user.id;
+    const { conversationId } = req.params;
+    const duration = parseInt(req.body.duration) || null; // seconds, sent from client
+
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Audio file is required" });
+      }
+
+      const convoCheck = await db.query(
+        `SELECT buyer_id, seller_id, is_blocked_by_buyer, is_blocked_by_seller
+         FROM conversations WHERE id = $1`,
+        [conversationId],
+      );
+      if (!convoCheck.rows.length) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      const { buyer_id, seller_id, is_blocked_by_buyer, is_blocked_by_seller } =
+        convoCheck.rows[0];
+      if (buyer_id !== userId && seller_id !== userId) {
+        return res.status(403).json({ error: "You are not part of this conversation" });
+      }
+      if (
+        (buyer_id === userId && is_blocked_by_seller) ||
+        (seller_id === userId && is_blocked_by_buyer)
+      ) {
+        return res.status(403).json({ error: "You cannot send messages in this conversation" });
+      }
+
+      // Upload audio to Cloudinary (stored under 'video' resource type — Cloudinary's requirement for audio)
+      const uploadResult = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder: "marketplace/chat/audio",
+            resource_type: "video",
+            format: "mp3",
+          },
+          (error, result) => (error ? reject(error) : resolve(result)),
+        );
+        stream.end(req.file.buffer);
+      });
+
+      const result = await db.query(
+        `INSERT INTO messages (conversation_id, sender_id, message_type, audio_url, media_duration)
+         VALUES ($1, $2, 'audio', $3, $4)
+         RETURNING id, created_at`,
+        [conversationId, userId, uploadResult.secure_url, duration],
+      );
+      const message = result.rows[0];
+
+      const senderResult = await db.query(
+        `SELECT name, profilepictureurl FROM users WHERE id = $1`,
+        [userId],
+      );
+      const sender = senderResult.rows[0];
+      const otherUserId = buyer_id === userId ? seller_id : buyer_id;
+
+      // Notification
+      try {
+        await db.query(
+          `INSERT INTO notifications (userid, type, title, message, relatedid, relatedtype)
+           VALUES ($1, 'message', 'New Message', $2, $3, $4)`,
+          [otherUserId, "You received a voice note 🎙️", conversationId, "conversation"],
+        );
+        await sendPushToUser(
+          otherUserId,
+          buildMessagePushPayload({
+            title: "New Message",
+            body: "You received a voice note 🎙️",
+            url: `/chat?conversation=${conversationId}`,
+            conversationId: Number(conversationId),
+            senderName: sender?.name,
+          }),
+        );
+      } catch (notifErr) {
+        console.log("[Chat] audio notification error:", notifErr.message);
+      }
+
+      // Update conversation preview
+      try {
+        await db.query(
+          `UPDATE conversations
+           SET last_message_id = $1, last_message_at = $2, last_message_preview = '🎙️ Voice note', updated_at = NOW()
+           WHERE id = $3`,
+          [message.id, message.created_at, conversationId],
+        );
+      } catch {}
+
+      res.status(201).json({
+        message: {
+          id: message.id,
+          conversation_id: parseInt(conversationId),
+          sender_id: userId,
+          message_type: "audio",
+          content: null,
+          audio_url: uploadResult.secure_url,
+          media_duration: duration,
+          created_at: message.created_at,
+          status: "sent",
+          sender_name: sender?.name || "You",
+          sender_picture: sender?.profilepictureurl || null,
+          is_mine: true,
+        },
+      });
+    } catch (error) {
+      console.error("[Chat] audio upload error:", error);
+      res.status(500).json({ error: "Failed to send voice note" });
+    }
+  },
+);
+
+// =====================================================
+// POST: Send a video message (max 90 seconds / 50 MB)
+// =====================================================
+router.post(
+  "/chat/conversations/:conversationId/video",
+  authMiddleware,
+  blockIfSuspended,
+  videoUpload.single("video"),
+  async (req, res) => {
+    const userId = req.user.id;
+    const { conversationId } = req.params;
+    const duration = parseInt(req.body.duration) || null; // seconds, sent from client
+
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Video file is required" });
+      }
+
+      const convoCheck = await db.query(
+        `SELECT buyer_id, seller_id, is_blocked_by_buyer, is_blocked_by_seller
+         FROM conversations WHERE id = $1`,
+        [conversationId],
+      );
+      if (!convoCheck.rows.length) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      const { buyer_id, seller_id, is_blocked_by_buyer, is_blocked_by_seller } =
+        convoCheck.rows[0];
+      if (buyer_id !== userId && seller_id !== userId) {
+        return res.status(403).json({ error: "You are not part of this conversation" });
+      }
+      if (
+        (buyer_id === userId && is_blocked_by_seller) ||
+        (seller_id === userId && is_blocked_by_buyer)
+      ) {
+        return res.status(403).json({ error: "You cannot send messages in this conversation" });
+      }
+
+      // Upload video to Cloudinary with eager thumbnail generation
+      const uploadResult = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder: "marketplace/chat/video",
+            resource_type: "video",
+            eager: [
+              // Generate a JPG thumbnail from the first frame
+              { format: "jpg", transformation: [{ start_offset: "0" }] },
+            ],
+            eager_async: false,
+          },
+          (error, result) => (error ? reject(error) : resolve(result)),
+        );
+        stream.end(req.file.buffer);
+      });
+
+      const thumbnailUrl = uploadResult.eager?.[0]?.secure_url || null;
+
+      const result = await db.query(
+        `INSERT INTO messages
+           (conversation_id, sender_id, message_type, video_url, video_thumbnail_url, media_duration)
+         VALUES ($1, $2, 'video', $3, $4, $5)
+         RETURNING id, created_at`,
+        [conversationId, userId, uploadResult.secure_url, thumbnailUrl, duration],
+      );
+      const message = result.rows[0];
+
+      const senderResult = await db.query(
+        `SELECT name, profilepictureurl FROM users WHERE id = $1`,
+        [userId],
+      );
+      const sender = senderResult.rows[0];
+      const otherUserId = buyer_id === userId ? seller_id : buyer_id;
+
+      // Notification
+      try {
+        await db.query(
+          `INSERT INTO notifications (userid, type, title, message, relatedid, relatedtype)
+           VALUES ($1, 'message', 'New Message', $2, $3, $4)`,
+          [otherUserId, "You received a video 🎬", conversationId, "conversation"],
+        );
+        await sendPushToUser(
+          otherUserId,
+          buildMessagePushPayload({
+            title: "New Message",
+            body: "You received a video 🎬",
+            url: `/chat?conversation=${conversationId}`,
+            conversationId: Number(conversationId),
+            senderName: sender?.name,
+          }),
+        );
+      } catch (notifErr) {
+        console.log("[Chat] video notification error:", notifErr.message);
+      }
+
+      // Update conversation preview
+      try {
+        await db.query(
+          `UPDATE conversations
+           SET last_message_id = $1, last_message_at = $2, last_message_preview = '🎬 Video', updated_at = NOW()
+           WHERE id = $3`,
+          [message.id, message.created_at, conversationId],
+        );
+      } catch {}
+
+      res.status(201).json({
+        message: {
+          id: message.id,
+          conversation_id: parseInt(conversationId),
+          sender_id: userId,
+          message_type: "video",
+          content: null,
+          video_url: uploadResult.secure_url,
+          video_thumbnail_url: thumbnailUrl,
+          media_duration: duration,
+          created_at: message.created_at,
+          status: "sent",
+          sender_name: sender?.name || "You",
+          sender_picture: sender?.profilepictureurl || null,
+          is_mine: true,
+        },
+      });
+    } catch (error) {
+      console.error("[Chat] video upload error:", error);
+      res.status(500).json({ error: "Failed to send video" });
     }
   },
 );
