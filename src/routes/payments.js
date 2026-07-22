@@ -702,7 +702,9 @@ router.post(
 
       // Create a Fonlok escrow invoice
       // Normalise seller phone the same way as the regular payment flow
-      const normalisedSellerPhone = normalisePhone(listing.seller_account_phone);
+      const normalisedSellerPhone = normalisePhone(
+        listing.seller_account_phone,
+      );
 
       let fonlokInvoice;
       try {
