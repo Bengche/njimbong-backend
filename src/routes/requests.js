@@ -12,6 +12,7 @@ import multer from "multer";
 import db from "../db.js";
 import cloudinary from "../storage/cloudinary.js";
 import authMiddleware from "../Middleware/authMiddleware.js";
+import adminMiddleware from "../Middleware/adminMiddleware.js";
 import { blockIfSuspended } from "../Middleware/suspensionMiddleware.js";
 import {
   buildNotificationPayload,
@@ -48,14 +49,20 @@ async function ensureTables() {
       budget_min        DECIMAL(12,2),
       budget_max        DECIMAL(12,2),
       currency          VARCHAR(10)  NOT NULL DEFAULT 'XAF',
-      country           VARCHAR(100),
+      country           VARCHAR(100) NOT NULL DEFAULT 'Cameroon',
       city              VARCHAR(100),
       status            VARCHAR(30)  NOT NULL DEFAULT 'open',
+      moderation_status VARCHAR(20)  NOT NULL DEFAULT 'pending',
       view_count        INTEGER      NOT NULL DEFAULT 0,
       fulfillment_count INTEGER      NOT NULL DEFAULT 0,
       created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
       expires_at        TIMESTAMPTZ  NOT NULL DEFAULT (NOW() + INTERVAL '30 days')
     )
+  `);
+  // Add moderation_status to existing tables that pre-date this column
+  await db.query(`
+    ALTER TABLE buyer_requests
+    ADD COLUMN IF NOT EXISTS moderation_status VARCHAR(20) NOT NULL DEFAULT 'pending'
   `);
   await db.query(`
     CREATE TABLE IF NOT EXISTS request_fulfillments (
@@ -80,6 +87,9 @@ async function ensureTables() {
   `);
   await db.query(
     `CREATE INDEX IF NOT EXISTS idx_buyer_requests_status   ON buyer_requests(status)`,
+  );
+  await db.query(
+    `CREATE INDEX IF NOT EXISTS idx_buyer_requests_modstatus ON buyer_requests(moderation_status)`,
   );
   await db.query(
     `CREATE INDEX IF NOT EXISTS idx_buyer_requests_created  ON buyer_requests(created_at DESC)`,
@@ -146,7 +156,7 @@ router.get("/requests", async (req, res) => {
     const country = req.query.country?.trim() || null;
     const city = req.query.city?.trim() || null;
 
-    const conditions = ["r.status = 'open'", "r.expires_at > NOW()"];
+    const conditions = ["r.status = 'open'", "r.expires_at > NOW()", "r.moderation_status = 'approved'"];
     const params = [];
 
     if (category) {
@@ -182,11 +192,16 @@ router.get("/requests", async (req, res) => {
          r.tags, r.image_url, r.budget_min, r.budget_max, r.currency,
          r.country, r.city, r.status, r.view_count, r.fulfillment_count,
          r.created_at, r.expires_at,
-         u.id AS user_id, u.name AS username, u.profile_picture AS user_avatar,
-         u.kyc_status AS user_kyc_status
+         u.id AS user_id, u.name AS username, u.profilepictureurl AS user_avatar,
+         CASE WHEN k.status = 'approved' THEN 'approved' ELSE NULL END AS user_kyc_status
        FROM buyer_requests r
        JOIN users u ON u.id = r.user_id
        LEFT JOIN categories c ON c.id = r.category_id
+       LEFT JOIN LATERAL (
+         SELECT status FROM kyc_verifications
+         WHERE userid = u.id AND status = 'approved'
+         LIMIT 1
+       ) k ON true
        WHERE ${where}
        ORDER BY r.created_at DESC
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
@@ -213,12 +228,14 @@ router.get("/requests/mine", authMiddleware, async (req, res) => {
       `SELECT
          r.id, r.title, r.description, r.category_id, c.name AS category_name,
          r.tags, r.image_url, r.budget_min, r.budget_max, r.currency,
-         r.country, r.city, r.status, r.view_count, r.fulfillment_count,
+         r.country, r.city, r.status, r.moderation_status, r.view_count, r.fulfillment_count,
          r.created_at, r.expires_at
        FROM buyer_requests r
        LEFT JOIN categories c ON c.id = r.category_id
        WHERE r.user_id = $1
        ORDER BY r.created_at DESC`,
+      [req.user.id],
+    );
       [req.user.id],
     );
     res.json({ requests: result.rows });
@@ -245,13 +262,18 @@ router.get("/requests/:id", async (req, res) => {
       `SELECT
          r.id, r.title, r.description, r.category_id, c.name AS category_name,
          r.tags, r.image_url, r.budget_min, r.budget_max, r.currency,
-         r.country, r.city, r.status, r.view_count, r.fulfillment_count,
+         r.country, r.city, r.status, r.moderation_status, r.view_count, r.fulfillment_count,
          r.created_at, r.expires_at, r.user_id,
-         u.name AS username, u.profile_picture AS user_avatar,
-         u.kyc_status AS user_kyc_status
+         u.name AS username, u.profilepictureurl AS user_avatar,
+         CASE WHEN k.status = 'approved' THEN 'approved' ELSE NULL END AS user_kyc_status
        FROM buyer_requests r
        JOIN users u ON u.id = r.user_id
        LEFT JOIN categories c ON c.id = r.category_id
+       LEFT JOIN LATERAL (
+         SELECT status FROM kyc_verifications
+         WHERE userid = u.id AND status = 'approved'
+         LIMIT 1
+       ) k ON true
        WHERE r.id = $1`,
       [id],
     );
@@ -295,20 +317,13 @@ router.post(
         description,
         category_id,
         tags,
-        budget_min,
-        budget_max,
-        currency,
         country,
-        city,
       } = req.body;
 
       if (!title?.trim() || !description?.trim()) {
         return res
           .status(400)
           .json({ error: "Title and description are required" });
-      }
-      if (!country?.trim() || !city?.trim()) {
-        return res.status(400).json({ error: "Country and city are required" });
       }
 
       const tagsArray = tags
@@ -329,8 +344,8 @@ router.post(
       const result = await db.query(
         `INSERT INTO buyer_requests
            (user_id, title, description, category_id, tags, image_url, cloudinary_id,
-            budget_min, budget_max, currency, country, city)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+            currency, country, moderation_status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending')
          RETURNING *`,
         [
           req.user.id,
@@ -340,11 +355,8 @@ router.post(
           tagsArray,
           image_url,
           cloudinary_id,
-          budget_min ? parseFloat(budget_min) : null,
-          budget_max ? parseFloat(budget_max) : null,
-          currency || "XAF",
-          country.trim(),
-          city.trim(),
+          'XAF',
+          (country?.trim()) || 'Cameroon',
         ],
       );
 
@@ -604,6 +616,86 @@ router.delete(
     } catch (err) {
       console.error("[Requests] DELETE fulfillments/:id:", err.message);
       res.status(500).json({ error: "Failed to withdraw fulfillment" });
+    }
+  },
+);
+
+// ── Admin — list pending requests ─────────────────────────────────────────────
+router.get(
+  "/admin/requests",
+  authMiddleware,
+  adminMiddleware,
+  async (_req, res) => {
+    try {
+      await ensureTables();
+      const result = await db.query(
+        `SELECT
+           r.id, r.title, r.description, r.category_id, c.name AS category_name,
+           r.tags, r.image_url, r.country, r.status, r.moderation_status,
+           r.created_at, r.expires_at,
+           u.id AS user_id, u.name AS username, u.email AS user_email
+         FROM buyer_requests r
+         JOIN users u ON u.id = r.user_id
+         LEFT JOIN categories c ON c.id = r.category_id
+         WHERE r.moderation_status = 'pending'
+         ORDER BY r.created_at ASC`,
+      );
+      res.json({ requests: result.rows });
+    } catch (err) {
+      console.error("[Requests] GET /admin/requests:", err.message);
+      res.status(500).json({ error: "Failed to fetch pending requests" });
+    }
+  },
+);
+
+// ── Admin — approve request ───────────────────────────────────────────────────
+router.put(
+  "/admin/requests/:id/approve",
+  authMiddleware,
+  adminMiddleware,
+  async (req, res) => {
+    try {
+      await ensureTables();
+      const { id } = req.params;
+      const result = await db.query(
+        `UPDATE buyer_requests
+         SET moderation_status = 'approved'
+         WHERE id = $1 AND moderation_status = 'pending'
+         RETURNING id, title`,
+        [id],
+      );
+      if (!result.rows.length)
+        return res.status(404).json({ error: "Request not found or already actioned" });
+      res.json({ message: "Request approved", request: result.rows[0] });
+    } catch (err) {
+      console.error("[Requests] PUT /admin/requests/:id/approve:", err.message);
+      res.status(500).json({ error: "Failed to approve request" });
+    }
+  },
+);
+
+// ── Admin — reject request ────────────────────────────────────────────────────
+router.put(
+  "/admin/requests/:id/reject",
+  authMiddleware,
+  adminMiddleware,
+  async (req, res) => {
+    try {
+      await ensureTables();
+      const { id } = req.params;
+      const result = await db.query(
+        `UPDATE buyer_requests
+         SET moderation_status = 'rejected', status = 'closed'
+         WHERE id = $1 AND moderation_status = 'pending'
+         RETURNING id, title`,
+        [id],
+      );
+      if (!result.rows.length)
+        return res.status(404).json({ error: "Request not found or already actioned" });
+      res.json({ message: "Request rejected", request: result.rows[0] });
+    } catch (err) {
+      console.error("[Requests] PUT /admin/requests/:id/reject:", err.message);
+      res.status(500).json({ error: "Failed to reject request" });
     }
   },
 );
