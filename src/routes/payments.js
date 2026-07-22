@@ -639,11 +639,9 @@ router.post(
 
       if (!listingResult.rows.length) {
         await client.query("ROLLBACK");
-        return res
-          .status(404)
-          .json({
-            error: "Listing not found or no longer available for purchase.",
-          });
+        return res.status(404).json({
+          error: "Listing not found or no longer available for purchase.",
+        });
       }
 
       const listing = listingResult.rows[0];
@@ -665,11 +663,9 @@ router.post(
       );
       if (existing.rowCount > 0) {
         await client.query("ROLLBACK");
-        return res
-          .status(409)
-          .json({
-            error: "There is already an active order for this listing.",
-          });
+        return res.status(409).json({
+          error: "There is already an active order for this listing.",
+        });
       }
 
       const agreedAmount = Math.round(Number(listing.price));
@@ -681,11 +677,9 @@ router.post(
         walletBalance = bal.balance;
       } catch {
         await client.query("ROLLBACK");
-        return res
-          .status(502)
-          .json({
-            error: "Unable to verify wallet balance. Please try again.",
-          });
+        return res.status(502).json({
+          error: "Unable to verify wallet balance. Please try again.",
+        });
       }
 
       if (walletBalance < agreedAmount) {
@@ -697,14 +691,23 @@ router.post(
         });
       }
 
-      // Fetch buyer details
+      // Fetch buyer details including saved MoMo phone for refund routing
       const buyerResult = await client.query(
-        `SELECT name, email FROM users WHERE id = $1`,
+        `SELECT name, email, momo_phone FROM users WHERE id = $1`,
         [buyer_id],
       );
       const buyer = buyerResult.rows[0];
 
       // Create a Fonlok escrow invoice
+      // Normalise seller phone the same way as the regular payment flow
+      const rawSellerDigits = (listing.seller_account_phone || "")
+        .replace(/\D/g, "");
+      const normalisedSellerPhone = rawSellerDigits
+        ? rawSellerDigits.startsWith("237")
+          ? rawSellerDigits
+          : "237" + rawSellerDigits
+        : undefined;
+
       let fonlokInvoice;
       try {
         fonlokInvoice = await createFonlokInvoice({
@@ -712,9 +715,11 @@ router.post(
           amount: agreedAmount,
           sellerName: listing.seller_name,
           sellerEmail: listing.seller_email,
-          sellerPhone: listing.seller_account_phone || "",
+          sellerPhone: normalisedSellerPhone,
           buyerEmail: buyer.email,
-          buyerPhone: "",
+          // Pass saved MoMo number so Fonlok can route refunds in disputes.
+          // Falls back to empty string if buyer has never topped up their wallet.
+          buyerPhone: buyer.momo_phone || "",
           description: `Wallet purchase: ${listing.title}`,
           orderId: `wallet-${Date.now()}`,
           expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
@@ -722,11 +727,9 @@ router.post(
       } catch (fonlokErr) {
         await client.query("ROLLBACK");
         console.error("[WalletPay] createInvoice error:", fonlokErr.message);
-        return res
-          .status(502)
-          .json({
-            error: "Failed to create payment invoice. Please try again.",
-          });
+        return res.status(502).json({
+          error: "Failed to create payment invoice. Please try again.",
+        });
       }
 
       // Create the local order record
