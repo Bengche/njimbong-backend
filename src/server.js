@@ -32,6 +32,7 @@ import fonlokWebhook from "./routes/fonlokWebhook.js";
 import emailVerification from "./routes/emailVerification.js";
 import offers from "./routes/offers.js";
 import orders from "./routes/orders.js";
+import requests from "./routes/requests.js";
 import db from "./db.js";
 import {
   sendListingExpiryWarning,
@@ -173,6 +174,7 @@ app.use("/home", homeListings);
 app.use("/api", payments);
 app.use("/api", offers);
 app.use("/api", orders);
+app.use("/api", requests);
 
 app.get("/", (req, res) => {
   res.status(200).json({ status: "ok" });
