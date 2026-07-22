@@ -87,10 +87,18 @@ const videoUpload = multer({
 let _mediaCols = false;
 async function ensureMediaColumns() {
   if (_mediaCols) return;
-  await db.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS audio_url          TEXT`);
-  await db.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS video_url          TEXT`);
-  await db.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS video_thumbnail_url TEXT`);
-  await db.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_duration     INTEGER`);
+  await db.query(
+    `ALTER TABLE messages ADD COLUMN IF NOT EXISTS audio_url          TEXT`,
+  );
+  await db.query(
+    `ALTER TABLE messages ADD COLUMN IF NOT EXISTS video_url          TEXT`,
+  );
+  await db.query(
+    `ALTER TABLE messages ADD COLUMN IF NOT EXISTS video_thumbnail_url TEXT`,
+  );
+  await db.query(
+    `ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_duration     INTEGER`,
+  );
   _mediaCols = true;
 }
 // Kick off migration immediately on module load
@@ -913,13 +921,17 @@ router.post(
       const { buyer_id, seller_id, is_blocked_by_buyer, is_blocked_by_seller } =
         convoCheck.rows[0];
       if (buyer_id !== userId && seller_id !== userId) {
-        return res.status(403).json({ error: "You are not part of this conversation" });
+        return res
+          .status(403)
+          .json({ error: "You are not part of this conversation" });
       }
       if (
         (buyer_id === userId && is_blocked_by_seller) ||
         (seller_id === userId && is_blocked_by_buyer)
       ) {
-        return res.status(403).json({ error: "You cannot send messages in this conversation" });
+        return res
+          .status(403)
+          .json({ error: "You cannot send messages in this conversation" });
       }
 
       // Upload audio to Cloudinary (stored under 'video' resource type — Cloudinary's requirement for audio)
@@ -955,7 +967,12 @@ router.post(
         await db.query(
           `INSERT INTO notifications (userid, type, title, message, relatedid, relatedtype)
            VALUES ($1, 'message', 'New Message', $2, $3, $4)`,
-          [otherUserId, "You received a voice note 🎙️", conversationId, "conversation"],
+          [
+            otherUserId,
+            "You received a voice note 🎙️",
+            conversationId,
+            "conversation",
+          ],
         );
         await sendPushToUser(
           otherUserId,
@@ -1033,13 +1050,17 @@ router.post(
       const { buyer_id, seller_id, is_blocked_by_buyer, is_blocked_by_seller } =
         convoCheck.rows[0];
       if (buyer_id !== userId && seller_id !== userId) {
-        return res.status(403).json({ error: "You are not part of this conversation" });
+        return res
+          .status(403)
+          .json({ error: "You are not part of this conversation" });
       }
       if (
         (buyer_id === userId && is_blocked_by_seller) ||
         (seller_id === userId && is_blocked_by_buyer)
       ) {
-        return res.status(403).json({ error: "You cannot send messages in this conversation" });
+        return res
+          .status(403)
+          .json({ error: "You cannot send messages in this conversation" });
       }
 
       // Upload video to Cloudinary with eager thumbnail generation
@@ -1066,7 +1087,13 @@ router.post(
            (conversation_id, sender_id, message_type, video_url, video_thumbnail_url, media_duration)
          VALUES ($1, $2, 'video', $3, $4, $5)
          RETURNING id, created_at`,
-        [conversationId, userId, uploadResult.secure_url, thumbnailUrl, duration],
+        [
+          conversationId,
+          userId,
+          uploadResult.secure_url,
+          thumbnailUrl,
+          duration,
+        ],
       );
       const message = result.rows[0];
 
@@ -1082,7 +1109,12 @@ router.post(
         await db.query(
           `INSERT INTO notifications (userid, type, title, message, relatedid, relatedtype)
            VALUES ($1, 'message', 'New Message', $2, $3, $4)`,
-          [otherUserId, "You received a video 🎬", conversationId, "conversation"],
+          [
+            otherUserId,
+            "You received a video 🎬",
+            conversationId,
+            "conversation",
+          ],
         );
         await sendPushToUser(
           otherUserId,

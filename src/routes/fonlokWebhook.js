@@ -314,7 +314,7 @@ async function handlePayoutReleased(event, invoiceId, eventType) {
       const d = details[0];
       // Seller reviews the buyer; buyer reviews the seller
       const sellerReviewLink = `${frontendUrl}/profile/${d.buyer_id}`;
-      const buyerReviewLink  = `${frontendUrl}/profile/${d.seller_id}`;
+      const buyerReviewLink = `${frontendUrl}/profile/${d.seller_id}`;
 
       sendPaymentReleasedSeller(
         { name: d.seller_name, email: d.seller_email },

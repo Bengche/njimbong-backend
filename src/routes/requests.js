@@ -108,7 +108,10 @@ async function uploadToCloudinary(buffer, folder = "marketplace/requests") {
 }
 
 // Helper — notify a user in-app + push
-async function notifyUser(userId, { title, message, type, relatedId, relatedType, url }) {
+async function notifyUser(
+  userId,
+  { title, message, type, relatedId, relatedType, url },
+) {
   try {
     await db.query(
       `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
@@ -120,7 +123,14 @@ async function notifyUser(userId, { title, message, type, relatedId, relatedType
   }
   sendPushToUser(
     userId,
-    buildNotificationPayload({ title, body: message, type, relatedId, relatedType, url }),
+    buildNotificationPayload({
+      title,
+      body: message,
+      type,
+      relatedId,
+      relatedType,
+      url,
+    }),
   );
 }
 
@@ -128,13 +138,13 @@ async function notifyUser(userId, { title, message, type, relatedId, relatedType
 router.get("/requests", async (req, res) => {
   try {
     await ensureTables();
-    const page     = Math.max(1, parseInt(req.query.page) || 1);
-    const limit    = Math.min(40, Math.max(1, parseInt(req.query.limit) || 20));
-    const offset   = (page - 1) * limit;
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(40, Math.max(1, parseInt(req.query.limit) || 20));
+    const offset = (page - 1) * limit;
     const category = req.query.category ? parseInt(req.query.category) : null;
-    const search   = req.query.search?.trim() || null;
-    const country  = req.query.country?.trim() || null;
-    const city     = req.query.city?.trim() || null;
+    const search = req.query.search?.trim() || null;
+    const country = req.query.country?.trim() || null;
+    const city = req.query.city?.trim() || null;
 
     const conditions = ["r.status = 'open'", "r.expires_at > NOW()"];
     const params = [];
@@ -245,7 +255,8 @@ router.get("/requests/:id", async (req, res) => {
        WHERE r.id = $1`,
       [id],
     );
-    if (!reqRes.rows.length) return res.status(404).json({ error: "Request not found" });
+    if (!reqRes.rows.length)
+      return res.status(404).json({ error: "Request not found" });
 
     // Fulfillments (visible to the request owner; public view shows count only)
     const fulRes = await db.query(
@@ -280,20 +291,31 @@ router.post(
     try {
       await ensureTables();
       const {
-        title, description, category_id, tags,
-        budget_min, budget_max, currency,
-        country, city,
+        title,
+        description,
+        category_id,
+        tags,
+        budget_min,
+        budget_max,
+        currency,
+        country,
+        city,
       } = req.body;
 
       if (!title?.trim() || !description?.trim()) {
-        return res.status(400).json({ error: "Title and description are required" });
+        return res
+          .status(400)
+          .json({ error: "Title and description are required" });
       }
       if (!country?.trim() || !city?.trim()) {
         return res.status(400).json({ error: "Country and city are required" });
       }
 
       const tagsArray = tags
-        ? tags.split(",").map((t) => t.trim()).filter(Boolean)
+        ? tags
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean)
         : [];
 
       let image_url = null;
@@ -345,14 +367,19 @@ router.delete("/requests/:id", authMiddleware, async (req, res) => {
       `SELECT id, user_id, cloudinary_id FROM buyer_requests WHERE id = $1`,
       [id],
     );
-    if (!existing.rows.length) return res.status(404).json({ error: "Request not found" });
+    if (!existing.rows.length)
+      return res.status(404).json({ error: "Request not found" });
     if (existing.rows[0].user_id !== req.user.id) {
-      return res.status(403).json({ error: "You can only delete your own requests" });
+      return res
+        .status(403)
+        .json({ error: "You can only delete your own requests" });
     }
 
     // Delete Cloudinary image if present
     if (existing.rows[0].cloudinary_id) {
-      cloudinary.uploader.destroy(existing.rows[0].cloudinary_id).catch(() => {});
+      cloudinary.uploader
+        .destroy(existing.rows[0].cloudinary_id)
+        .catch(() => {});
     }
 
     await db.query(`DELETE FROM buyer_requests WHERE id = $1`, [id]);
@@ -377,7 +404,8 @@ router.post(
     try {
       await ensureTables();
       const requestId = parseInt(req.params.id);
-      if (isNaN(requestId)) return res.status(400).json({ error: "Invalid request ID" });
+      if (isNaN(requestId))
+        return res.status(400).json({ error: "Invalid request ID" });
 
       // Load the request
       const reqRes = await db.query(
@@ -387,29 +415,43 @@ router.post(
          WHERE r.id = $1`,
         [requestId],
       );
-      if (!reqRes.rows.length) return res.status(404).json({ error: "Request not found" });
+      if (!reqRes.rows.length)
+        return res.status(404).json({ error: "Request not found" });
 
       const buyerRequest = reqRes.rows[0];
 
       if (buyerRequest.user_id === req.user.id) {
-        return res.status(403).json({ error: "You cannot fulfill your own request" });
+        return res
+          .status(403)
+          .json({ error: "You cannot fulfill your own request" });
       }
       if (buyerRequest.status !== "open") {
-        return res.status(409).json({ error: "This request is no longer open" });
+        return res
+          .status(409)
+          .json({ error: "This request is no longer open" });
       }
 
       // Validate required seller fields
       const {
-        price, currency, condition, city, country,
-        seller_email, seller_phone,
-        delivery_type, delivery_notes, message,
+        price,
+        currency,
+        condition,
+        city,
+        country,
+        seller_email,
+        seller_phone,
+        delivery_type,
+        delivery_notes,
+        message,
       } = req.body;
 
       if (!price || isNaN(parseFloat(price))) {
         return res.status(400).json({ error: "A valid price is required" });
       }
       if (!seller_phone?.trim()) {
-        return res.status(400).json({ error: "A contact phone number is required" });
+        return res
+          .status(400)
+          .json({ error: "A contact phone number is required" });
       }
       if (!city?.trim() || !country?.trim()) {
         return res.status(400).json({ error: "City and country are required" });
@@ -475,11 +517,18 @@ router.post(
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
          RETURNING *`,
         [
-          requestId, req.user.id, listing.id,
-          parseFloat(price), currency || buyerRequest.currency || "XAF",
-          condition.trim(), city.trim(), country.trim(),
-          seller_email?.trim() || null, seller_phone.trim(),
-          delivery_type || "pickup", delivery_notes?.trim() || null,
+          requestId,
+          req.user.id,
+          listing.id,
+          parseFloat(price),
+          currency || buyerRequest.currency || "XAF",
+          condition.trim(),
+          city.trim(),
+          country.trim(),
+          seller_email?.trim() || null,
+          seller_phone.trim(),
+          delivery_type || "pickup",
+          delivery_notes?.trim() || null,
           message?.trim() || null,
         ],
       );
@@ -491,10 +540,9 @@ router.post(
       );
 
       // ── 5. Notify the buyer ───────────────────────────────────────────────
-      const sellerRes = await db.query(
-        `SELECT name FROM users WHERE id = $1`,
-        [req.user.id],
-      );
+      const sellerRes = await db.query(`SELECT name FROM users WHERE id = $1`, [
+        req.user.id,
+      ]);
       const sellerName = sellerRes.rows[0]?.name || "A seller";
 
       await notifyUser(buyerRequest.user_id, {
@@ -538,7 +586,8 @@ router.delete(
         `SELECT id, seller_id, request_id FROM request_fulfillments WHERE id = $1`,
         [id],
       );
-      if (!existing.rows.length) return res.status(404).json({ error: "Fulfillment not found" });
+      if (!existing.rows.length)
+        return res.status(404).json({ error: "Fulfillment not found" });
       if (existing.rows[0].seller_id !== req.user.id) {
         return res.status(403).json({ error: "Unauthorized" });
       }

@@ -20,14 +20,17 @@ const router = express.Router();
 // This column stores the email the buyer explicitly entered at checkout,
 // which may differ from their account email. It is the authoritative address
 // for all payment notification emails to the buyer.
-;(async () => {
+(async () => {
   try {
     await db.query(`
       ALTER TABLE orders
       ADD COLUMN IF NOT EXISTS buyer_checkout_email VARCHAR(255)
     `);
   } catch (err) {
-    console.error('[Payments] migration error (buyer_checkout_email):', err.message);
+    console.error(
+      "[Payments] migration error (buyer_checkout_email):",
+      err.message,
+    );
   }
 })();
 
@@ -174,8 +177,14 @@ router.post(
             fonlok_status, order_reference, buyer_checkout_email)
          VALUES ($1, $2, $3, $4, 'XAF', 'none', $5, $6)
          RETURNING id`,
-        [listing_id, buyer_id, listing.seller_id, agreedAmount, orderId,
-         buyer_email?.trim() || null],
+        [
+          listing_id,
+          buyer_id,
+          listing.seller_id,
+          agreedAmount,
+          orderId,
+          buyer_email?.trim() || null,
+        ],
       );
       dbOrderId = orderResult.rows[0].id;
 
