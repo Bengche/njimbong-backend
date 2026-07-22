@@ -14,6 +14,8 @@ import {
 import {
   sendPaymentReleasedSeller,
   sendPaymentReleasedBuyer,
+  sendPaymentConfirmedBuyer,
+  sendPaymentConfirmedSeller,
 } from "../utils/email.js";
 import {
   buildNotificationPayload,
@@ -447,9 +449,9 @@ router.post("/payments/release", authMiddleware, async (req, res) => {
          l.city        AS listing_city,
          l.country     AS listing_country,
          b.name        AS buyer_name,
-         b.email       AS buyer_email,
+         COALESCE(o.buyer_checkout_email, b.email) AS buyer_email,
          s.name        AS seller_name,
-         s.email       AS seller_email
+         COALESCE(l.seller_email, s.email)         AS seller_email
        FROM orders o
        LEFT JOIN userlistings l  ON l.id  = o.listing_id
        LEFT JOIN users        b  ON b.id  = o.buyer_id
@@ -524,9 +526,28 @@ router.post("/payments/release", authMiddleware, async (req, res) => {
       [order.seller_id, order_id, order.buyer_id],
     );
 
-    // Emails are sent by the Fonlok `payment.released` webhook which fires
-    // automatically after releaseFonlokPayment() succeeds. Sending here too
-    // would duplicate every email. The webhook has idempotency protection.
+    // Release emails — sent directly here because the Fonlok webhook skips
+    // them when the local order is already marked 'released' (race condition).
+    Promise.allSettled([
+      sendPaymentReleasedSeller(
+        { name: order.seller_name, email: order.seller_email },
+        { title: order.listing_title },
+        order_id,
+        grossAmount,
+        sellerReceives,
+        platformFee,
+        order.currency || "XAF",
+        reviewLink,
+      ),
+      sendPaymentReleasedBuyer(
+        { name: order.buyer_name, email: order.buyer_email },
+        { title: order.listing_title },
+        order_id,
+        grossAmount,
+        order.currency || "XAF",
+        `${APP_URL}/profile/${order.seller_id}`,
+      ),
+    ]).catch(() => {});
 
     return res.json({
       status: "released",
@@ -825,6 +846,19 @@ router.post(
             `${buyer.name} purchased "${listing.title}" from their wallet. Payment is held in escrow.`,
             orderId,
           ],
+        ),
+        // Confirmation emails to both parties
+        sendPaymentConfirmedBuyer(
+          { name: buyer.name, email: buyer.email },
+          { title: listing.title, amount: agreedAmount, currency: listing.currency || "XAF" },
+          orderRef,
+        ),
+        sendPaymentConfirmedSeller(
+          { name: listing.seller_name, email: listing.seller_email },
+          { title: listing.title },
+          orderRef,
+          agreedAmount,
+          listing.currency || "XAF",
         ),
       ]).catch(() => {});
 
