@@ -16,7 +16,11 @@ export default function optionalAuthMiddleware(req, _res, next) {
     const authHeader = req.headers.authorization;
     if (authHeader.startsWith("Bearer ") && authHeader.length > 7) {
       const bearerToken = authHeader.substring(7);
-      if (bearerToken && bearerToken !== "undefined" && bearerToken !== "null") {
+      if (
+        bearerToken &&
+        bearerToken !== "undefined" &&
+        bearerToken !== "null"
+      ) {
         token = bearerToken;
       }
     }

@@ -558,25 +558,28 @@ router.get("/listings/:id", optionalAuthMiddleware, async (req, res) => {
 });
 
 // Get related listings based on category and tags
-router.get("/listings/related/:id", optionalAuthMiddleware, async (req, res) => {
-  const { id } = req.params;
+router.get(
+  "/listings/related/:id",
+  optionalAuthMiddleware,
+  async (req, res) => {
+    const { id } = req.params;
 
-  try {
-    // First, get the current listing's category and tags
-    const currentListing = await db.query(
-      `SELECT categoryid, tags FROM userlistings WHERE id = $1`,
-      [id],
-    );
+    try {
+      // First, get the current listing's category and tags
+      const currentListing = await db.query(
+        `SELECT categoryid, tags FROM userlistings WHERE id = $1`,
+        [id],
+      );
 
-    if (currentListing.rows.length === 0) {
-      return res.status(404).json({ error: "Listing not found" });
-    }
+      if (currentListing.rows.length === 0) {
+        return res.status(404).json({ error: "Listing not found" });
+      }
 
-    const { categoryid, tags } = currentListing.rows[0];
+      const { categoryid, tags } = currentListing.rows[0];
 
-    // Find related listings by category or similar tags
-    // Only show approved listings
-    let queryText = `
+      // Find related listings by category or similar tags
+      // Only show approved listings
+      let queryText = `
       SELECT l.*, c.name as categoryname, u.name as username, u.verified as userverified,
       CASE WHEN kyc.status = 'approved' THEN true ELSE false END as kyc_verified
       FROM userlistings l 
@@ -588,42 +591,43 @@ router.get("/listings/related/:id", optionalAuthMiddleware, async (req, res) => 
       AND l.moderation_status = 'approved'
     `;
 
-    const queryParams = [id];
-    let paramCount = 2;
+      const queryParams = [id];
+      let paramCount = 2;
 
-    // Add category filter if exists
-    if (categoryid) {
-      queryText += ` AND l.categoryid = $${paramCount}`;
-      queryParams.push(categoryid);
-      paramCount++;
-    }
+      // Add category filter if exists
+      if (categoryid) {
+        queryText += ` AND l.categoryid = $${paramCount}`;
+        queryParams.push(categoryid);
+        paramCount++;
+      }
 
-    queryText += ` LIMIT 8`;
+      queryText += ` LIMIT 8`;
 
-    const relatedResult = await db.query(queryText, queryParams);
+      const relatedResult = await db.query(queryText, queryParams);
 
-    // Fetch images for each related listing
-    const relatedWithImages = await Promise.all(
-      relatedResult.rows.map(async (listing) => {
-        const imagesResult = await db.query(
-          `SELECT * FROM imagelistings 
+      // Fetch images for each related listing
+      const relatedWithImages = await Promise.all(
+        relatedResult.rows.map(async (listing) => {
+          const imagesResult = await db.query(
+            `SELECT * FROM imagelistings 
            WHERE listingid = $1 
            ORDER BY is_main DESC`,
-          [listing.id],
-        );
-        return {
-          ...listing,
-          images: imagesResult.rows,
-        };
-      }),
-    );
+            [listing.id],
+          );
+          return {
+            ...listing,
+            images: imagesResult.rows,
+          };
+        }),
+      );
 
-    res.status(200).json(relatedWithImages);
-  } catch (error) {
-    console.error("Error fetching related listings:", error);
-    res.status(500).json({ error: "Failed to fetch related listings" });
-  }
-});
+      res.status(200).json(relatedWithImages);
+    } catch (error) {
+      console.error("Error fetching related listings:", error);
+      res.status(500).json({ error: "Failed to fetch related listings" });
+    }
+  },
+);
 
 // Mark listing as sold (only owner can do this)
 router.put("/listings/:id/mark-sold", authMiddleware, async (req, res) => {
@@ -992,12 +996,9 @@ router.put(
       } = req.body;
 
       if (!title || !description || !price || !categoryId || !city) {
-        return res
-          .status(400)
-          .json({
-            error:
-              "Title, description, price, category, and city are required.",
-          });
+        return res.status(400).json({
+          error: "Title, description, price, category, and city are required.",
+        });
       }
 
       // Delete removed existing images

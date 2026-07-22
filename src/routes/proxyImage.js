@@ -9,9 +9,7 @@ const router = express.Router();
 const ALLOWED_HOSTS = [".cloudinary.com", "cloudinary.com"];
 
 function isAllowedHost(hostname) {
-  return ALLOWED_HOSTS.some(
-    (h) => hostname === h || hostname.endsWith(h),
-  );
+  return ALLOWED_HOSTS.some((h) => hostname === h || hostname.endsWith(h));
 }
 
 /**
@@ -36,7 +34,9 @@ router.get("/proxy-image", async (req, res) => {
   }
 
   if (!["http:", "https:"].includes(parsed.protocol)) {
-    return res.status(400).json({ error: "Only http/https URLs are supported." });
+    return res
+      .status(400)
+      .json({ error: "Only http/https URLs are supported." });
   }
 
   if (!isAllowedHost(parsed.hostname)) {
@@ -56,8 +56,7 @@ router.get("/proxy-image", async (req, res) => {
           return;
         }
 
-        const contentType =
-          upstream.headers["content-type"] || "image/jpeg";
+        const contentType = upstream.headers["content-type"] || "image/jpeg";
 
         res.set("Content-Type", contentType);
         res.set("Cache-Control", "public, max-age=604800, immutable"); // 7 days
