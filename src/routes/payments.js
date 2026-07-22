@@ -850,7 +850,11 @@ router.post(
         // Confirmation emails to both parties
         sendPaymentConfirmedBuyer(
           { name: buyer.name, email: buyer.email },
-          { title: listing.title, amount: agreedAmount, currency: listing.currency || "XAF" },
+          {
+            title: listing.title,
+            amount: agreedAmount,
+            currency: listing.currency || "XAF",
+          },
           orderRef,
         ),
         sendPaymentConfirmedSeller(
