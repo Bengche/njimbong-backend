@@ -225,9 +225,10 @@ router.post(
       );
 
       if (!normalisedSellerPhone) {
-        console.warn(
-          `[Payments] Listing ${listing_id} seller phone is missing or invalid — Fonlok may reject the invoice.`,
-        );
+        return res.status(422).json({
+          error:
+            "The seller has not configured a valid MoMo phone number and cannot receive payments at this time. Please contact the seller.",
+        });
       }
 
       // Step 1 — Create Fonlok escrow invoice
@@ -705,6 +706,14 @@ router.post(
       const normalisedSellerPhone = normalisePhone(
         listing.seller_account_phone,
       );
+
+      if (!normalisedSellerPhone) {
+        await client.query("ROLLBACK");
+        return res.status(422).json({
+          error:
+            "The seller has not configured a valid MoMo phone number and cannot receive payments at this time. Please contact the seller.",
+        });
+      }
 
       let fonlokInvoice;
       try {
