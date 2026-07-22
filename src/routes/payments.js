@@ -22,6 +22,15 @@ import {
 
 const router = express.Router();
 
+/** Normalise a raw phone string to a 12-digit Cameroonian MoMo number
+ *  (237 + 9 digits) or undefined if the result is not valid. */
+function normalisePhone(raw) {
+  if (!raw) return undefined;
+  const digits = String(raw).replace(/\D/g, "");
+  const withPrefix = digits.startsWith("237") ? digits : "237" + digits;
+  return /^237\d{9}$/.test(withPrefix) ? withPrefix : undefined;
+}
+
 // ── Startup migration: add buyer_checkout_email if not yet present ─────────────
 // This column stores the email the buyer explicitly entered at checkout,
 // which may differ from their account email. It is the authoritative address
@@ -211,20 +220,13 @@ router.post(
         Date.now() + 7 * 24 * 60 * 60 * 1000,
       ).toISOString();
 
-      const rawSellerDigits = (
-        listing.listing_phone ||
-        listing.seller_account_phone ||
-        ""
-      ).replace(/\D/g, "");
-      const normalisedSellerPhone = rawSellerDigits
-        ? rawSellerDigits.startsWith("237")
-          ? rawSellerDigits
-          : "237" + rawSellerDigits
-        : undefined;
+      const normalisedSellerPhone = normalisePhone(
+        listing.listing_phone || listing.seller_account_phone,
+      );
 
       if (!normalisedSellerPhone) {
         console.warn(
-          `[Payments] Listing ${listing_id} seller has no phone number — Fonlok may reject the invoice.`,
+          `[Payments] Listing ${listing_id} seller phone is missing or invalid — Fonlok may reject the invoice.`,
         );
       }
 
@@ -700,13 +702,7 @@ router.post(
 
       // Create a Fonlok escrow invoice
       // Normalise seller phone the same way as the regular payment flow
-      const rawSellerDigits = (listing.seller_account_phone || "")
-        .replace(/\D/g, "");
-      const normalisedSellerPhone = rawSellerDigits
-        ? rawSellerDigits.startsWith("237")
-          ? rawSellerDigits
-          : "237" + rawSellerDigits
-        : undefined;
+      const normalisedSellerPhone = normalisePhone(listing.seller_account_phone);
 
       let fonlokInvoice;
       try {
