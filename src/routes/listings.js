@@ -3,6 +3,7 @@ import db from "../db.js";
 import cloudinary from "../storage/cloudinary.js";
 import multer from "multer";
 import authMiddleware from "../Middleware/authMiddleware.js";
+import optionalAuthMiddleware from "../Middleware/optionalAuthMiddleware.js";
 import { blockIfSuspended } from "../Middleware/suspensionMiddleware.js";
 import {
   sendListingSubmittedAdmin,
@@ -504,7 +505,7 @@ router.get("/listings/check-duplicate", authMiddleware, async (req, res) => {
 });
 
 // Get a single listing by ID with images
-router.get("/listings/:id", authMiddleware, async (req, res) => {
+router.get("/listings/:id", optionalAuthMiddleware, async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -557,7 +558,7 @@ router.get("/listings/:id", authMiddleware, async (req, res) => {
 });
 
 // Get related listings based on category and tags
-router.get("/listings/related/:id", authMiddleware, async (req, res) => {
+router.get("/listings/related/:id", optionalAuthMiddleware, async (req, res) => {
   const { id } = req.params;
 
   try {
