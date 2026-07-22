@@ -628,6 +628,7 @@ router.post(
       const listingResult = await client.query(
         `SELECT l.id, l.title, l.description, l.price, l.currency,
                 l.userid AS seller_id,
+                l.phone  AS listing_phone,
                 COALESCE(l.seller_email, s.email) AS seller_email,
                 s.name  AS seller_name,
                 s.phone AS seller_account_phone
@@ -704,7 +705,7 @@ router.post(
       // Create a Fonlok escrow invoice
       // Normalise seller phone the same way as the regular payment flow
       const normalisedSellerPhone = normalisePhone(
-        listing.seller_account_phone,
+        listing.listing_phone || listing.seller_account_phone,
       );
 
       if (!normalisedSellerPhone) {
