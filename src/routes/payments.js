@@ -641,14 +641,18 @@ router.post(
         await client.query("ROLLBACK");
         return res
           .status(404)
-          .json({ error: "Listing not found or no longer available for purchase." });
+          .json({
+            error: "Listing not found or no longer available for purchase.",
+          });
       }
 
       const listing = listingResult.rows[0];
 
       if (listing.seller_id === buyer_id) {
         await client.query("ROLLBACK");
-        return res.status(400).json({ error: "You cannot buy your own listing." });
+        return res
+          .status(400)
+          .json({ error: "You cannot buy your own listing." });
       }
 
       // Reject if there is already an active order for this listing
@@ -663,7 +667,9 @@ router.post(
         await client.query("ROLLBACK");
         return res
           .status(409)
-          .json({ error: "There is already an active order for this listing." });
+          .json({
+            error: "There is already an active order for this listing.",
+          });
       }
 
       const agreedAmount = Math.round(Number(listing.price));
@@ -677,7 +683,9 @@ router.post(
         await client.query("ROLLBACK");
         return res
           .status(502)
-          .json({ error: "Unable to verify wallet balance. Please try again." });
+          .json({
+            error: "Unable to verify wallet balance. Please try again.",
+          });
       }
 
       if (walletBalance < agreedAmount) {
@@ -716,7 +724,9 @@ router.post(
         console.error("[WalletPay] createInvoice error:", fonlokErr.message);
         return res
           .status(502)
-          .json({ error: "Failed to create payment invoice. Please try again." });
+          .json({
+            error: "Failed to create payment invoice. Please try again.",
+          });
       }
 
       // Create the local order record

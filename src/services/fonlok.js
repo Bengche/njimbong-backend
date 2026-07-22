@@ -147,9 +147,7 @@ export async function initiateWalletDeposit({
  * @returns {{ reference, status, amount_credited, transaction_id, user_ref }}
  */
 export async function getWalletDepositStatus(reference) {
-  const { data } = await client.get(
-    `/v1/wallet/deposit/${reference}/status`,
-  );
+  const { data } = await client.get(`/v1/wallet/deposit/${reference}/status`);
   return data;
 }
 

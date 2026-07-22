@@ -61,7 +61,10 @@ const depositLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many deposit requests. Please wait a moment before trying again." },
+  message: {
+    error:
+      "Too many deposit requests. Please wait a moment before trying again.",
+  },
 });
 
 const withdrawLimiter = rateLimit({
@@ -69,21 +72,28 @@ const withdrawLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many withdrawal requests. Please wait before trying again." },
+  message: {
+    error: "Too many withdrawal requests. Please wait before trying again.",
+  },
 });
 
 // ─── GET /api/wallet/balance ─────────────────────────────────────────────────
 router.get("/wallet/balance", authMiddleware, async (req, res) => {
   try {
     const data = await getWalletBalance(toUserRef(req.user.id));
-    return res.json({ balance: data.balance, currency: data.currency ?? "XAF" });
+    return res.json({
+      balance: data.balance,
+      currency: data.currency ?? "XAF",
+    });
   } catch (err) {
     // 404 = no wallet yet — return zero balance
     if (err.response?.status === 404) {
       return res.json({ balance: 0, currency: "XAF" });
     }
     console.error("[Wallet] balance error:", err.message);
-    return res.status(502).json({ error: "Unable to fetch wallet balance. Please try again." });
+    return res
+      .status(502)
+      .json({ error: "Unable to fetch wallet balance. Please try again." });
   }
 });
 
@@ -119,12 +129,16 @@ router.post(
     if (isNaN(parsedAmount) || parsedAmount < MIN_AMOUNT) {
       return res
         .status(400)
-        .json({ error: `Minimum deposit amount is ${MIN_AMOUNT.toLocaleString()} XAF.` });
+        .json({
+          error: `Minimum deposit amount is ${MIN_AMOUNT.toLocaleString()} XAF.`,
+        });
     }
     if (parsedAmount > MAX_AMOUNT) {
       return res
         .status(400)
-        .json({ error: `Maximum deposit amount is ${MAX_AMOUNT.toLocaleString()} XAF per transaction.` });
+        .json({
+          error: `Maximum deposit amount is ${MAX_AMOUNT.toLocaleString()} XAF per transaction.`,
+        });
     }
 
     const normPhone = normalisePhone(phone);
@@ -171,9 +185,7 @@ router.post(
       const msg =
         err.response?.data?.error ||
         "Failed to initiate deposit. Please check your MoMo number and try again.";
-      return res
-        .status(err.response?.status ?? 502)
-        .json({ error: msg });
+      return res.status(err.response?.status ?? 502).json({ error: msg });
     }
   },
 );
@@ -221,7 +233,9 @@ router.get(
         return res.status(404).json({ error: "Transaction not found." });
       }
       console.error("[Wallet] deposit status error:", err.message);
-      return res.status(502).json({ error: "Failed to check deposit status. Please try again." });
+      return res
+        .status(502)
+        .json({ error: "Failed to check deposit status. Please try again." });
     }
   },
 );
@@ -244,12 +258,16 @@ router.post(
     if (isNaN(parsedAmount) || parsedAmount < MIN_AMOUNT) {
       return res
         .status(400)
-        .json({ error: `Minimum withdrawal is ${MIN_AMOUNT.toLocaleString()} XAF.` });
+        .json({
+          error: `Minimum withdrawal is ${MIN_AMOUNT.toLocaleString()} XAF.`,
+        });
     }
     if (parsedAmount > MAX_AMOUNT) {
       return res
         .status(400)
-        .json({ error: `Maximum withdrawal is ${MAX_AMOUNT.toLocaleString()} XAF per transaction.` });
+        .json({
+          error: `Maximum withdrawal is ${MAX_AMOUNT.toLocaleString()} XAF per transaction.`,
+        });
     }
 
     const normPhone = normalisePhone(phone);
@@ -268,7 +286,9 @@ router.post(
     } catch {
       return res
         .status(502)
-        .json({ error: "Unable to verify wallet balance. Please try again shortly." });
+        .json({
+          error: "Unable to verify wallet balance. Please try again shortly.",
+        });
     }
 
     if (currentBalance < parsedAmount) {
@@ -314,11 +334,8 @@ router.post(
     } catch (err) {
       console.error("[Wallet] withdraw error:", err.message);
       const msg =
-        err.response?.data?.error ||
-        "Withdrawal failed. Please try again.";
-      return res
-        .status(err.response?.status ?? 502)
-        .json({ error: msg });
+        err.response?.data?.error || "Withdrawal failed. Please try again.";
+      return res.status(err.response?.status ?? 502).json({ error: msg });
     }
   },
 );
