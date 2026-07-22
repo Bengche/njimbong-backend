@@ -403,7 +403,7 @@ router.put("/offers/:id", authMiddleware, async (req, res) => {
   }
 });
 
-// ─── DELETE /api/offers/:id — buyer withdraws an offer ───────────────────────
+// ─── DELETE /api/offers/:id — buyer withdraws / dismisses an offer ───────────
 router.delete("/offers/:id", authMiddleware, async (req, res) => {
   await ensureOffersTable();
   const buyerId = req.user.id;
@@ -411,14 +411,15 @@ router.delete("/offers/:id", authMiddleware, async (req, res) => {
   try {
     const result = await db.query(
       `UPDATE offers SET status='withdrawn', updated_at=NOW()
-       WHERE id=$1 AND buyer_id=$2 AND status='pending'
+       WHERE id=$1 AND buyer_id=$2
+         AND status IN ('pending', 'countered', 'declined', 'expired')
        RETURNING id`,
       [id, buyerId],
     );
     if (result.rows.length === 0) {
       return res
         .status(404)
-        .json({ error: "Offer not found or already resolved." });
+        .json({ error: "Offer not found or cannot be withdrawn." });
     }
     res.json({ message: "Offer withdrawn." });
   } catch (err) {
