@@ -298,7 +298,12 @@ router.get("/my-listings", authMiddleware, async (req, res) => {
     await ensureListingColumns();
 
     const listingsResult = await db.query(
-      `SELECT l.*, c.name as category_name
+      `SELECT l.*, c.name as category_name,
+              EXISTS (
+                SELECT 1 FROM orders o
+                WHERE o.listing_id = l.id
+                  AND o.fonlok_status IN ('paid_in_escrow', 'released', 'disputed')
+              ) AS is_escrow_sold
        FROM userlistings l 
        LEFT JOIN categories c ON l.categoryid = c.id 
        WHERE l.userid = $1
@@ -704,6 +709,21 @@ router.put("/listings/:id/mark-available", authMiddleware, async (req, res) => {
 
     if (listing.status === "Available") {
       return res.status(400).json({ error: "Listing is already available" });
+    }
+
+    // Block re-listing if funds were ever placed in escrow for this listing
+    const escrowCheck = await db.query(
+      `SELECT 1 FROM orders
+       WHERE listing_id = $1
+         AND fonlok_status IN ('paid_in_escrow', 'released', 'disputed')
+       LIMIT 1`,
+      [id],
+    );
+    if (escrowCheck.rowCount > 0) {
+      return res.status(409).json({
+        error:
+          "This listing was sold through Njimbong escrow and cannot be relisted. Create a new listing if you have more stock.",
+      });
     }
 
     // Update the listing status to Available
