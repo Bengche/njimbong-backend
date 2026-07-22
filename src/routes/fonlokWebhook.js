@@ -189,9 +189,10 @@ async function handlePaymentConfirmed(event, invoiceId) {
   try {
     const { rows: details } = await db.query(
       `SELECT ul.title, o.amount, o.currency,
-              buyer.name  AS buyer_name,  buyer.email AS buyer_email,
+              buyer.name  AS buyer_name,
+              COALESCE(o.buyer_checkout_email, buyer.email) AS buyer_email,
               seller.name AS seller_name,
-              COALESCE(ul.seller_email, seller.email) AS seller_contact_email
+              COALESCE(ul.seller_email, seller.email) AS seller_email
        FROM orders o
        JOIN userlistings ul ON ul.id     = o.listing_id
        JOIN users buyer     ON buyer.id  = o.buyer_id
@@ -203,7 +204,7 @@ async function handlePaymentConfirmed(event, invoiceId) {
     if (details.length > 0) {
       const d = details[0];
       sendPaymentConfirmedSeller(
-        { name: d.seller_name, email: d.seller_contact_email },
+        { name: d.seller_name, email: d.seller_email },
         { title: d.title },
         order.id,
         d.amount,
@@ -295,9 +296,12 @@ async function handlePayoutReleased(event, invoiceId, eventType) {
   try {
     const { rows: details } = await db.query(
       `SELECT ul.title,
-              buyer.id   AS buyer_id,  buyer.name  AS buyer_name,  buyer.email AS buyer_email,
-              seller.id  AS seller_id, seller.name AS seller_name,
-              COALESCE(ul.seller_email, seller.email) AS seller_contact_email
+              buyer.id   AS buyer_id,
+              buyer.name AS buyer_name,
+              COALESCE(o.buyer_checkout_email, buyer.email) AS buyer_email,
+              seller.id  AS seller_id,
+              seller.name AS seller_name,
+              COALESCE(ul.seller_email, seller.email) AS seller_email
        FROM orders o
        JOIN userlistings ul ON ul.id     = o.listing_id
        JOIN users buyer     ON buyer.id  = o.buyer_id
@@ -310,10 +314,10 @@ async function handlePayoutReleased(event, invoiceId, eventType) {
       const d = details[0];
       // Seller reviews the buyer; buyer reviews the seller
       const sellerReviewLink = `${frontendUrl}/profile/${d.buyer_id}`;
-      const buyerReviewLink = `${frontendUrl}/profile/${d.seller_id}`;
+      const buyerReviewLink  = `${frontendUrl}/profile/${d.seller_id}`;
 
       sendPaymentReleasedSeller(
-        { name: d.seller_name, email: d.seller_contact_email },
+        { name: d.seller_name, email: d.seller_email },
         { title: d.title },
         order.id,
         grossAmount,

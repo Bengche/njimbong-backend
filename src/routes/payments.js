@@ -16,6 +16,21 @@ import {
 
 const router = express.Router();
 
+// ── Startup migration: add buyer_checkout_email if not yet present ─────────────
+// This column stores the email the buyer explicitly entered at checkout,
+// which may differ from their account email. It is the authoritative address
+// for all payment notification emails to the buyer.
+;(async () => {
+  try {
+    await db.query(`
+      ALTER TABLE orders
+      ADD COLUMN IF NOT EXISTS buyer_checkout_email VARCHAR(255)
+    `);
+  } catch (err) {
+    console.error('[Payments] migration error (buyer_checkout_email):', err.message);
+  }
+})();
+
 /** Retry helper — never retries 4xx client errors, retries 5xx with exponential backoff. */
 async function withRetry(fn, maxAttempts = 3) {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -156,10 +171,11 @@ router.post(
       const orderResult = await client.query(
         `INSERT INTO orders
            (listing_id, buyer_id, seller_id, amount, currency,
-            fonlok_status, order_reference)
-         VALUES ($1, $2, $3, $4, 'XAF', 'none', $5)
+            fonlok_status, order_reference, buyer_checkout_email)
+         VALUES ($1, $2, $3, $4, 'XAF', 'none', $5, $6)
          RETURNING id`,
-        [listing_id, buyer_id, listing.seller_id, agreedAmount, orderId],
+        [listing_id, buyer_id, listing.seller_id, agreedAmount, orderId,
+         buyer_email?.trim() || null],
       );
       dbOrderId = orderResult.rows[0].id;
 
@@ -443,9 +459,9 @@ router.post("/payments/release", authMiddleware, async (req, res) => {
     // ── 2. Call Fonlok to release funds ──────────────────────────────────────
     const release = await releaseFonlokPayment(order.fonlok_invoice_id);
 
-    const grossAmount   = Number(order.amount);
-    const platformFee   = release.platform_fee  ?? Math.round(grossAmount * 0.03);
-    const sellerReceives = release.seller_receives ?? (grossAmount - platformFee);
+    const grossAmount = Number(order.amount);
+    const platformFee = release.platform_fee ?? Math.round(grossAmount * 0.03);
+    const sellerReceives = release.seller_receives ?? grossAmount - platformFee;
 
     // ── 3. Update order status ────────────────────────────────────────────────
     await db.query(
@@ -490,36 +506,9 @@ router.post("/payments/release", authMiddleware, async (req, res) => {
       [order.seller_id, order_id, order.buyer_id],
     );
 
-    // ── 7. Emails (fire-and-forget) ───────────────────────────────────────────
-    const listing = {
-      title: order.listing_title,
-      city: order.listing_city,
-      country: order.listing_country,
-    };
-
-    sendPaymentReleasedSeller(
-      { name: order.seller_name, email: order.seller_email },
-      listing,
-      order.order_reference,
-      grossAmount,
-      sellerReceives,
-      platformFee,
-      order.currency,
-      reviewLink,
-    ).catch((e) =>
-      console.error("[Payments] seller release email error:", e.message),
-    );
-
-    sendPaymentReleasedBuyer(
-      { name: order.buyer_name, email: order.buyer_email },
-      listing,
-      order.order_reference,
-      grossAmount,
-      order.currency,
-      `${APP_URL}/profile/${order.seller_id}`,
-    ).catch((e) =>
-      console.error("[Payments] buyer release email error:", e.message),
-    );
+    // Emails are sent by the Fonlok `payment.released` webhook which fires
+    // automatically after releaseFonlokPayment() succeeds. Sending here too
+    // would duplicate every email. The webhook has idempotency protection.
 
     return res.json({
       status: "released",
