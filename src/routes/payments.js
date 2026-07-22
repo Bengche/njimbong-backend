@@ -8,11 +8,17 @@ import {
   getFonlokPaymentStatus,
   releaseFonlokPayment,
   disputeFonlokPayment,
+  payEscrowFromWallet,
+  getWalletBalance,
 } from "../services/fonlok.js";
 import {
   sendPaymentReleasedSeller,
   sendPaymentReleasedBuyer,
 } from "../utils/email.js";
+import {
+  buildNotificationPayload,
+  sendPushToUser,
+} from "../utils/pushNotifications.js";
 
 const router = express.Router();
 
@@ -591,5 +597,237 @@ router.post("/payments/dispute", authMiddleware, async (req, res) => {
     return res.status(500).json({ error: "Failed to raise dispute." });
   }
 });
+
+/**
+ * POST /payments/initiate-wallet
+ * Buyer funds a listing purchase directly from their Njimbong wallet balance.
+ * Creates a Fonlok invoice, then immediately pays it from the wallet so funds
+ * are held in escrow. No MoMo prompt is sent — balance is deducted instantly.
+ */
+router.post(
+  "/payments/initiate-wallet",
+  authMiddleware,
+  blockIfSuspended,
+  async (req, res) => {
+    const { listing_id } = req.body;
+    const buyer_id = req.user.id;
+    const userRef = `njimbong_${buyer_id}`;
+
+    if (!listing_id) {
+      return res.status(400).json({ error: "listing_id is required." });
+    }
+
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
+
+      // Lock the listing row to prevent concurrent purchases
+      const listingResult = await client.query(
+        `SELECT l.id, l.title, l.description, l.price, l.currency,
+                l.userid AS seller_id,
+                COALESCE(l.seller_email, s.email) AS seller_email,
+                s.name  AS seller_name,
+                s.phone AS seller_account_phone
+         FROM userlistings l
+         JOIN users s ON s.id = l.userid
+         WHERE l.id = $1
+           AND l.status = 'Available'
+           AND l.moderation_status = 'approved'
+         FOR UPDATE OF l`,
+        [listing_id],
+      );
+
+      if (!listingResult.rows.length) {
+        await client.query("ROLLBACK");
+        return res
+          .status(404)
+          .json({ error: "Listing not found or no longer available for purchase." });
+      }
+
+      const listing = listingResult.rows[0];
+
+      if (listing.seller_id === buyer_id) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "You cannot buy your own listing." });
+      }
+
+      // Reject if there is already an active order for this listing
+      const existing = await client.query(
+        `SELECT id FROM orders
+         WHERE listing_id = $1
+           AND fonlok_status IN ('pending', 'paid_in_escrow')
+         LIMIT 1`,
+        [listing_id],
+      );
+      if (existing.rowCount > 0) {
+        await client.query("ROLLBACK");
+        return res
+          .status(409)
+          .json({ error: "There is already an active order for this listing." });
+      }
+
+      const agreedAmount = Math.round(Number(listing.price));
+
+      // Verify the buyer has sufficient wallet balance before creating the invoice
+      let walletBalance = 0;
+      try {
+        const bal = await getWalletBalance(userRef);
+        walletBalance = bal.balance;
+      } catch {
+        await client.query("ROLLBACK");
+        return res
+          .status(502)
+          .json({ error: "Unable to verify wallet balance. Please try again." });
+      }
+
+      if (walletBalance < agreedAmount) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: `Insufficient wallet balance. You have ${walletBalance.toLocaleString()} XAF but this listing costs ${agreedAmount.toLocaleString()} XAF.`,
+          balance: walletBalance,
+          required: agreedAmount,
+        });
+      }
+
+      // Fetch buyer details
+      const buyerResult = await client.query(
+        `SELECT name, email FROM users WHERE id = $1`,
+        [buyer_id],
+      );
+      const buyer = buyerResult.rows[0];
+
+      // Create a Fonlok escrow invoice
+      let fonlokInvoice;
+      try {
+        fonlokInvoice = await createFonlokInvoice({
+          title: listing.title,
+          amount: agreedAmount,
+          sellerName: listing.seller_name,
+          sellerEmail: listing.seller_email,
+          sellerPhone: listing.seller_account_phone || "",
+          buyerEmail: buyer.email,
+          buyerPhone: "",
+          description: `Wallet purchase: ${listing.title}`,
+          orderId: `wallet-${Date.now()}`,
+          expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+        });
+      } catch (fonlokErr) {
+        await client.query("ROLLBACK");
+        console.error("[WalletPay] createInvoice error:", fonlokErr.message);
+        return res
+          .status(502)
+          .json({ error: "Failed to create payment invoice. Please try again." });
+      }
+
+      // Create the local order record
+      const orderRef = `NJM-W${Date.now()}`;
+      const orderResult = await client.query(
+        `INSERT INTO orders
+           (buyer_id, seller_id, listing_id, amount, currency,
+            fonlok_invoice_id, fonlok_status, order_reference)
+         VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
+         RETURNING id`,
+        [
+          buyer_id,
+          listing.seller_id,
+          listing_id,
+          agreedAmount,
+          listing.currency || "XAF",
+          fonlokInvoice.id,
+          orderRef,
+        ],
+      );
+      const orderId = orderResult.rows[0].id;
+
+      // Fund the invoice from the buyer's wallet
+      let walletPay;
+      try {
+        walletPay = await payEscrowFromWallet({
+          invoiceId: fonlokInvoice.id,
+          userRef,
+        });
+      } catch (walletErr) {
+        await client.query("ROLLBACK");
+        console.error("[WalletPay] pay error:", walletErr.message);
+        const errMsg = walletErr.response?.data?.error || "";
+        if (
+          walletErr.response?.status === 409 ||
+          errMsg.includes("insufficient")
+        ) {
+          return res
+            .status(409)
+            .json({ error: "Insufficient wallet balance for this purchase." });
+        }
+        return res
+          .status(502)
+          .json({ error: "Wallet payment failed. Please try again." });
+      }
+
+      // Mark order as paid_in_escrow and listing as In Escrow
+      await client.query(
+        `UPDATE orders
+           SET fonlok_status = 'paid_in_escrow', updated_at = NOW()
+         WHERE id = $1`,
+        [orderId],
+      );
+      await client.query(
+        `UPDATE userlistings SET status = 'In Escrow' WHERE id = $1`,
+        [listing_id],
+      );
+
+      // Wallet audit record
+      await client.query(
+        `INSERT INTO wallet_transactions
+           (user_id, type, amount, status, description)
+         VALUES ($1, 'escrow_pay', $2, 'completed', $3)`,
+        [buyer_id, agreedAmount, `Purchase: ${listing.title}`],
+      );
+
+      await client.query("COMMIT");
+
+      // Async notifications — non-critical
+      Promise.allSettled([
+        sendPushToUser(
+          listing.seller_id,
+          buildNotificationPayload("new_order", {
+            title: "New wallet order received",
+            body: `${buyer.name} purchased "${listing.title}" using their Njimbong wallet. Funds are secured in escrow.`,
+            url: "/orders",
+          }),
+        ),
+        db.query(
+          `INSERT INTO notifications
+             (userid, title, message, type, relatedid, relatedtype)
+           VALUES ($1, 'New order', $2, 'payment', $3, 'order')`,
+          [
+            listing.seller_id,
+            `${buyer.name} purchased "${listing.title}" from their wallet. Payment is held in escrow.`,
+            orderId,
+          ],
+        ),
+      ]).catch(() => {});
+
+      return res.json({
+        order_id: orderId,
+        order_reference: orderRef,
+        amount_paid: walletPay.amount_paid,
+        new_balance: walletPay.new_balance,
+        currency: walletPay.currency ?? "XAF",
+        release_code: walletPay.release_code,
+        status: "paid_in_escrow",
+        message:
+          "Payment successful. Funds are held in escrow until you confirm delivery.",
+      });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      console.error("[WalletPay] unexpected error:", err.message);
+      return res
+        .status(500)
+        .json({ error: "An unexpected error occurred. Please try again." });
+    } finally {
+      client.release();
+    }
+  },
+);
 
 export default router;

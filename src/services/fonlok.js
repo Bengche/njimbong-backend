@@ -120,6 +120,84 @@ export async function listFonlokWebhooks() {
   return data;
 }
 
+// ─── Wallet API ───────────────────────────────────────────────────────────────
+
+/**
+ * Initiate a wallet deposit via MoMo.
+ * The user is charged `amount + 1.5%`; their wallet is credited `amount` on success.
+ * @returns {{ transaction_id, reference, amount_requested, amount_charged, fee, status }}
+ */
+export async function initiateWalletDeposit({
+  amount,
+  phone,
+  userRef,
+  description = "Wallet top-up",
+}) {
+  const { data } = await client.post("/v1/wallet/deposit/initiate", {
+    amount,
+    phone,
+    user_ref: userRef,
+    description,
+  });
+  return data;
+}
+
+/**
+ * Poll wallet deposit status. Idempotent — safe to call multiple times.
+ * @returns {{ reference, status, amount_credited, transaction_id, user_ref }}
+ */
+export async function getWalletDepositStatus(reference) {
+  const { data } = await client.get(
+    `/v1/wallet/deposit/${reference}/status`,
+  );
+  return data;
+}
+
+/**
+ * Get wallet balance for a user. Returns 0 balance if no wallet exists yet.
+ * @returns {{ user_ref, balance, currency }}
+ */
+export async function getWalletBalance(userRef) {
+  const { data } = await client.get("/v1/wallet/balance", {
+    params: { user_ref: userRef },
+  });
+  return data;
+}
+
+/**
+ * Withdraw funds from wallet directly to the user's MoMo account.
+ * No fee charged to user — Fonlok covers Campay's 1% disbursement fee.
+ * Synchronous — funds dispatched before response is returned.
+ * @returns {{ transaction_id, reference, amount_withdrawn, new_balance, status }}
+ */
+export async function withdrawFromWallet({
+  amount,
+  phone,
+  userRef,
+  description = "Withdrawal",
+}) {
+  const { data } = await client.post("/v1/wallet/withdraw", {
+    amount,
+    phone,
+    user_ref: userRef,
+    description,
+  });
+  return data;
+}
+
+/**
+ * Fund an escrow invoice directly from the user's wallet balance.
+ * Invoice must be in `pending` status. Buyer receives a release link by email.
+ * @returns {{ invoice_id, amount_paid, new_balance, currency, status, release_code }}
+ */
+export async function payEscrowFromWallet({ invoiceId, userRef }) {
+  const { data } = await client.post("/v1/wallet/pay", {
+    invoice_id: invoiceId,
+    user_ref: userRef,
+  });
+  return data;
+}
+
 /**
  * Delete a registered webhook by its Fonlok webhook ID.
  * @param {string} webhookId
