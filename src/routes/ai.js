@@ -60,6 +60,21 @@ const requireAI = (req, res, next) => {
   next();
 };
 
+// ── Diagnostic: list available models for this key ───────────────────────────
+router.get("/ai/models", requireAI, async (req, res) => {
+  try {
+    const key = process.env.GEMINI_API_KEY;
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1/models?key=${key}`,
+    );
+    const data = await r.json();
+    const names = (data.models || []).map((m) => m.name);
+    return res.json({ models: names, raw: data });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/ai/chat — Stream a Njimbong AI chat response (SSE)
 // ─────────────────────────────────────────────────────────────────────────────
