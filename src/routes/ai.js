@@ -105,8 +105,10 @@ router.post("/ai/chat", requireAI, aiLimiter, async (req, res) => {
         error: isKeyError
           ? "Njimbong AI is not configured. Please contact the administrator."
           : isQuota
-          ? "Njimbong AI is over its request limit. Please try again in a minute."
-          : "Njimbong AI is temporarily unavailable. Please try again.",
+            ? "Njimbong AI is over its request limit. Please try again in a minute."
+            : "Njimbong AI is temporarily unavailable. Please try again.",
+        // Temporary debug field — remove after diagnosis
+        _debug: msg,
       });
     }
     // If headers already sent (SSE started), send error event
