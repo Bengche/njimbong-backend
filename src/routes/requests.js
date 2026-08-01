@@ -156,7 +156,11 @@ router.get("/requests", async (req, res) => {
     const country = req.query.country?.trim() || null;
     const city = req.query.city?.trim() || null;
 
-    const conditions = ["r.status = 'open'", "r.expires_at > NOW()", "r.moderation_status = 'approved'"];
+    const conditions = [
+      "r.status = 'open'",
+      "r.expires_at > NOW()",
+      "r.moderation_status = 'approved'",
+    ];
     const params = [];
 
     if (category) {
@@ -310,13 +314,7 @@ router.post(
   async (req, res) => {
     try {
       await ensureTables();
-      const {
-        title,
-        description,
-        category_id,
-        tags,
-        country,
-      } = req.body;
+      const { title, description, category_id, tags, country } = req.body;
 
       if (!title?.trim() || !description?.trim()) {
         return res
@@ -353,8 +351,8 @@ router.post(
           tagsArray,
           image_url,
           cloudinary_id,
-          'XAF',
-          (country?.trim()) || 'Cameroon',
+          "XAF",
+          country?.trim() || "Cameroon",
         ],
       );
 
@@ -663,7 +661,9 @@ router.put(
         [id],
       );
       if (!result.rows.length)
-        return res.status(404).json({ error: "Request not found or already actioned" });
+        return res
+          .status(404)
+          .json({ error: "Request not found or already actioned" });
       res.json({ message: "Request approved", request: result.rows[0] });
     } catch (err) {
       console.error("[Requests] PUT /admin/requests/:id/approve:", err.message);
@@ -689,7 +689,9 @@ router.put(
         [id],
       );
       if (!result.rows.length)
-        return res.status(404).json({ error: "Request not found or already actioned" });
+        return res
+          .status(404)
+          .json({ error: "Request not found or already actioned" });
       res.json({ message: "Request rejected", request: result.rows[0] });
     } catch (err) {
       console.error("[Requests] PUT /admin/requests/:id/reject:", err.message);
