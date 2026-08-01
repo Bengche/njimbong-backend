@@ -50,9 +50,11 @@ const imageAiLimiter = rateLimit({
 
 // ── Guard: check if AI is configured ─────────────────────────────────────────
 const requireAI = (req, res, next) => {
-  if (!process.env.GEMINI_API_KEY) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key || key.startsWith("<")) {
     return res.status(503).json({
-      error: "Njimbong AI is not configured. Please add GEMINI_API_KEY to your environment.",
+      error:
+        "Njimbong AI is not configured. Please add a valid GEMINI_API_KEY to your environment.",
     });
   }
   next();
@@ -69,13 +71,18 @@ router.post("/ai/chat", requireAI, aiLimiter, async (req, res) => {
   }
 
   if (message.length > 2000) {
-    return res.status(400).json({ error: "Message too long (max 2000 characters)" });
+    return res
+      .status(400)
+      .json({ error: "Message too long (max 2000 characters)" });
   }
 
   // Sanitize history (keep last 20 turns)
   const safeHistory = Array.isArray(history)
     ? history
-        .filter((m) => m && typeof m.role === "string" && typeof m.content === "string")
+        .filter(
+          (m) =>
+            m && typeof m.role === "string" && typeof m.content === "string",
+        )
         .slice(-20)
     : [];
 
@@ -84,10 +91,28 @@ router.post("/ai/chat", requireAI, aiLimiter, async (req, res) => {
   } catch (err) {
     console.error("AI chat error:", err.message);
     if (!res.headersSent) {
-      return res.status(500).json({ error: "Njimbong AI is temporarily unavailable." });
+      // Distinguish Gemini auth/quota errors from generic errors
+      const msg = err.message || "";
+      const isKeyError =
+        msg.includes("API key") ||
+        msg.includes("PERMISSION_DENIED") ||
+        msg.includes("not configured") ||
+        msg.includes("401") ||
+        msg.includes("403");
+      const isQuota =
+        msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota");
+      return res.status(503).json({
+        error: isKeyError
+          ? "Njimbong AI is not configured. Please contact the administrator."
+          : isQuota
+          ? "Njimbong AI is over its request limit. Please try again in a minute."
+          : "Njimbong AI is temporarily unavailable. Please try again.",
+      });
     }
     // If headers already sent (SSE started), send error event
-    res.write(`data: ${JSON.stringify({ error: "AI response interrupted." })}\n\n`);
+    res.write(
+      `data: ${JSON.stringify({ error: "AI response interrupted." })}\n\n`,
+    );
     res.write("data: [DONE]\n\n");
     res.end();
   }
@@ -96,28 +121,50 @@ router.post("/ai/chat", requireAI, aiLimiter, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/ai/enhance — Enhance a text field
 // ─────────────────────────────────────────────────────────────────────────────
-router.post("/ai/enhance", requireAI, authMiddleware, aiLimiter, async (req, res) => {
-  const { text, context = "listing_description", extraContext = "" } = req.body;
+router.post(
+  "/ai/enhance",
+  requireAI,
+  authMiddleware,
+  aiLimiter,
+  async (req, res) => {
+    const {
+      text,
+      context = "listing_description",
+      extraContext = "",
+    } = req.body;
 
-  if (!text || typeof text !== "string" || text.trim().length < 5) {
-    return res.status(400).json({ error: "Text too short to enhance (min 5 characters)" });
-  }
+    if (!text || typeof text !== "string" || text.trim().length < 5) {
+      return res
+        .status(400)
+        .json({ error: "Text too short to enhance (min 5 characters)" });
+    }
 
-  if (text.length > 5000) {
-    return res.status(400).json({ error: "Text too long for enhancement (max 5000 characters)" });
-  }
+    if (text.length > 5000) {
+      return res
+        .status(400)
+        .json({ error: "Text too long for enhancement (max 5000 characters)" });
+    }
 
-  const validContexts = ["listing_description", "listing_title", "chat_message", "dispute", "review"];
-  const safeContext = validContexts.includes(context) ? context : "listing_description";
+    const validContexts = [
+      "listing_description",
+      "listing_title",
+      "chat_message",
+      "dispute",
+      "review",
+    ];
+    const safeContext = validContexts.includes(context)
+      ? context
+      : "listing_description";
 
-  try {
-    const result = await enhanceText(text.trim(), safeContext, extraContext);
-    res.json(result);
-  } catch (err) {
-    console.error("AI enhance error:", err.message);
-    res.status(500).json({ error: "Could not enhance text at this time." });
-  }
-});
+    try {
+      const result = await enhanceText(text.trim(), safeContext, extraContext);
+      res.json(result);
+    } catch (err) {
+      console.error("AI enhance error:", err.message);
+      res.status(500).json({ error: "Could not enhance text at this time." });
+    }
+  },
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/ai/analyze-listing-image — Analyze image → listing fields
@@ -136,18 +183,26 @@ router.post(
     // Fetch categories from DB for matching
     let categories = [];
     try {
-      const result = await db.query("SELECT id, name FROM categories ORDER BY name ASC");
+      const result = await db.query(
+        "SELECT id, name FROM categories ORDER BY name ASC",
+      );
       categories = result.rows;
     } catch (err) {
       console.error("Could not fetch categories for AI:", err.message);
     }
 
     try {
-      const analysis = await analyzeListingImage(req.file.buffer, req.file.mimetype, categories);
+      const analysis = await analyzeListingImage(
+        req.file.buffer,
+        req.file.mimetype,
+        categories,
+      );
       res.json(analysis);
     } catch (err) {
       console.error("AI image analysis error:", err.message);
-      res.status(500).json({ error: "Could not analyze the image. Please try again." });
+      res
+        .status(500)
+        .json({ error: "Could not analyze the image. Please try again." });
     }
   },
 );
@@ -155,18 +210,23 @@ router.post(
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/ai/summarize-chat — Summarize a conversation
 // ─────────────────────────────────────────────────────────────────────────────
-router.post("/ai/summarize-chat", requireAI, authMiddleware, aiLimiter, async (req, res) => {
-  const { conversationId } = req.body;
+router.post(
+  "/ai/summarize-chat",
+  requireAI,
+  authMiddleware,
+  aiLimiter,
+  async (req, res) => {
+    const { conversationId } = req.body;
 
-  if (!conversationId) {
-    return res.status(400).json({ error: "conversationId is required" });
-  }
+    if (!conversationId) {
+      return res.status(400).json({ error: "conversationId is required" });
+    }
 
-  // Fetch messages from DB (only messages the authenticated user can access)
-  let messages = [];
-  try {
-    const result = await db.query(
-      `SELECT m.content, m.message_type, m.created_at, u.name as sender_name
+    // Fetch messages from DB (only messages the authenticated user can access)
+    let messages = [];
+    try {
+      const result = await db.query(
+        `SELECT m.content, m.message_type, m.created_at, u.name as sender_name
        FROM messages m
        JOIN users u ON u.id = m.sender_id
        JOIN conversations c ON c.id = m.conversation_id
@@ -175,26 +235,33 @@ router.post("/ai/summarize-chat", requireAI, authMiddleware, aiLimiter, async (r
          AND m.is_deleted = false
        ORDER BY m.created_at ASC
        LIMIT 100`,
-      [conversationId, req.user.id],
-    );
-    messages = result.rows;
-  } catch (err) {
-    console.error("Could not fetch messages for summary:", err.message);
-    return res.status(500).json({ error: "Could not load conversation." });
-  }
+        [conversationId, req.user.id],
+      );
+      messages = result.rows;
+    } catch (err) {
+      console.error("Could not fetch messages for summary:", err.message);
+      return res.status(500).json({ error: "Could not load conversation." });
+    }
 
-  if (messages.length === 0) {
-    return res.json({ summary: "No messages yet.", keyPoints: [], status: "empty" });
-  }
+    if (messages.length === 0) {
+      return res.json({
+        summary: "No messages yet.",
+        keyPoints: [],
+        status: "empty",
+      });
+    }
 
-  try {
-    const summary = await summarizeConversation(messages);
-    res.json(summary);
-  } catch (err) {
-    console.error("AI summarize error:", err.message);
-    res.status(500).json({ error: "Could not generate summary at this time." });
-  }
-});
+    try {
+      const summary = await summarizeConversation(messages);
+      res.json(summary);
+    } catch (err) {
+      console.error("AI summarize error:", err.message);
+      res
+        .status(500)
+        .json({ error: "Could not generate summary at this time." });
+    }
+  },
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/ai/search-suggestions — Smart search suggestions
@@ -212,9 +279,11 @@ router.get("/ai/search-suggestions", requireAI, aiLimiter, async (req, res) => {
   try {
     const [catResult, searchResult] = await Promise.all([
       db.query("SELECT id, name FROM categories ORDER BY name ASC"),
-      db.query(
-        "SELECT query, COUNT(*) as cnt FROM search_logs GROUP BY query ORDER BY cnt DESC LIMIT 10",
-      ).catch(() => ({ rows: [] })),
+      db
+        .query(
+          "SELECT query, COUNT(*) as cnt FROM search_logs GROUP BY query ORDER BY cnt DESC LIMIT 10",
+        )
+        .catch(() => ({ rows: [] })),
     ]);
     categories = catResult.rows;
     recentSearches = searchResult.rows.map((r) => r.query);
@@ -223,7 +292,11 @@ router.get("/ai/search-suggestions", requireAI, aiLimiter, async (req, res) => {
   }
 
   try {
-    const suggestions = await getSearchSuggestions(query.trim(), categories, recentSearches);
+    const suggestions = await getSearchSuggestions(
+      query.trim(),
+      categories,
+      recentSearches,
+    );
     res.json(suggestions);
   } catch (err) {
     console.error("AI search suggestions error:", err.message);
@@ -246,7 +319,9 @@ router.post(
 
     let categories = [];
     try {
-      const result = await db.query("SELECT id, name FROM categories ORDER BY name ASC");
+      const result = await db.query(
+        "SELECT id, name FROM categories ORDER BY name ASC",
+      );
       categories = result.rows;
     } catch (err) {
       console.error("Could not fetch categories:", err.message);
@@ -254,7 +329,11 @@ router.post(
 
     let searchData;
     try {
-      searchData = await analyzeImageForVisualSearch(req.file.buffer, req.file.mimetype, categories);
+      searchData = await analyzeImageForVisualSearch(
+        req.file.buffer,
+        req.file.mimetype,
+        categories,
+      );
     } catch (err) {
       console.error("AI visual search analysis error:", err.message);
       return res.status(500).json({ error: "Could not analyze image." });
@@ -327,20 +406,32 @@ router.post(
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/ai/seo-description — Generate SEO description
 // ─────────────────────────────────────────────────────────────────────────────
-router.post("/ai/seo-description", requireAI, authMiddleware, aiLimiter, async (req, res) => {
-  const { title, category, condition, price, city } = req.body;
+router.post(
+  "/ai/seo-description",
+  requireAI,
+  authMiddleware,
+  aiLimiter,
+  async (req, res) => {
+    const { title, category, condition, price, city } = req.body;
 
-  if (!title) {
-    return res.status(400).json({ error: "title is required" });
-  }
+    if (!title) {
+      return res.status(400).json({ error: "title is required" });
+    }
 
-  try {
-    const result = await generateSEODescription({ title, category, condition, price, city });
-    res.json(result);
-  } catch (err) {
-    console.error("AI SEO description error:", err.message);
-    res.status(500).json({ error: "Could not generate SEO description." });
-  }
-});
+    try {
+      const result = await generateSEODescription({
+        title,
+        category,
+        condition,
+        price,
+        city,
+      });
+      res.json(result);
+    } catch (err) {
+      console.error("AI SEO description error:", err.message);
+      res.status(500).json({ error: "Could not generate SEO description." });
+    }
+  },
+);
 
 export default router;

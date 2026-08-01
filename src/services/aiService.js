@@ -8,10 +8,12 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 // ── Utility ──────────────────────────────────────────────────────────────────
 function getClient() {
-  if (!GEMINI_API_KEY) {
+  // Read at call time so Railway env vars injected after module load still work
+  const key = process.env.GEMINI_API_KEY;
+  if (!key || key.startsWith("<")) {
     throw new Error("GEMINI_API_KEY is not configured");
   }
-  return new GoogleGenerativeAI(GEMINI_API_KEY);
+  return new GoogleGenerativeAI(key);
 }
 
 // ── System Prompt ─────────────────────────────────────────────────────────────
@@ -72,7 +74,9 @@ export async function streamChatResponse(message, history, pageContext, res) {
   const genAI = getClient();
   const model = genAI.getGenerativeModel({
     model: "gemini-1.5-flash",
-    systemInstruction: NJIMBONG_SYSTEM_PROMPT + (pageContext ? `\n\nCURRENT USER CONTEXT: ${pageContext}` : ""),
+    systemInstruction:
+      NJIMBONG_SYSTEM_PROMPT +
+      (pageContext ? `\n\nCURRENT USER CONTEXT: ${pageContext}` : ""),
   });
 
   // Convert history to Gemini format
@@ -137,13 +141,20 @@ IMPORTANT: Return ONLY valid JSON, nothing else. No markdown. No explanation.`;
   const raw = result.response.text().trim();
 
   // Strip markdown code fences if present
-  const clean = raw.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/```$/, "").trim();
+  const clean = raw
+    .replace(/^```json\s*/, "")
+    .replace(/^```\s*/, "")
+    .replace(/```$/, "")
+    .trim();
 
   try {
     return JSON.parse(clean);
   } catch {
     // Fallback: return the raw text as-is
-    return { enhanced: text, tips: ["AI enhancement not available at this time."] };
+    return {
+      enhanced: text,
+      tips: ["AI enhancement not available at this time."],
+    };
   }
 }
 
@@ -189,7 +200,11 @@ IMPORTANT: Return ONLY valid JSON. No markdown. No explanation outside the JSON.
 
   const result = await model.generateContent([prompt, imagePart]);
   const raw = result.response.text().trim();
-  const clean = raw.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/```$/, "").trim();
+  const clean = raw
+    .replace(/^```json\s*/, "")
+    .replace(/^```\s*/, "")
+    .replace(/```$/, "")
+    .trim();
 
   try {
     return JSON.parse(clean);
@@ -215,7 +230,11 @@ export async function summarizeConversation(messages) {
     .join("\n");
 
   if (!transcript.trim()) {
-    return { summary: "No text messages to summarize.", keyPoints: [], status: "empty" };
+    return {
+      summary: "No text messages to summarize.",
+      keyPoints: [],
+      status: "empty",
+    };
   }
 
   const prompt = `You are summarizing a marketplace chat conversation for Njimbong platform. Be concise and professional.
@@ -234,12 +253,20 @@ IMPORTANT: Return ONLY valid JSON. No markdown.`;
 
   const result = await model.generateContent(prompt);
   const raw = result.response.text().trim();
-  const clean = raw.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/```$/, "").trim();
+  const clean = raw
+    .replace(/^```json\s*/, "")
+    .replace(/^```\s*/, "")
+    .replace(/```$/, "")
+    .trim();
 
   try {
     return JSON.parse(clean);
   } catch {
-    return { summary: "Unable to generate summary at this time.", keyPoints: [], status: "other" };
+    return {
+      summary: "Unable to generate summary at this time.",
+      keyPoints: [],
+      status: "other",
+    };
   }
 }
 
@@ -251,7 +278,11 @@ IMPORTANT: Return ONLY valid JSON. No markdown.`;
  * @param {string[]} recentSearches - Recent search terms from the DB
  * @returns {Promise<{suggestions: string[], refinements: string[]}>}
  */
-export async function getSearchSuggestions(query, categories, recentSearches = []) {
+export async function getSearchSuggestions(
+  query,
+  categories,
+  recentSearches = [],
+) {
   const genAI = getClient();
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
@@ -277,7 +308,11 @@ IMPORTANT: Return ONLY valid JSON. No markdown.`;
 
   const result = await model.generateContent(prompt);
   const raw = result.response.text().trim();
-  const clean = raw.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/```$/, "").trim();
+  const clean = raw
+    .replace(/^```json\s*/, "")
+    .replace(/^```\s*/, "")
+    .replace(/```$/, "")
+    .trim();
 
   try {
     return JSON.parse(clean);
@@ -294,7 +329,11 @@ IMPORTANT: Return ONLY valid JSON. No markdown.`;
  * @param {Array<{id: number, name: string}>} categories
  * @returns {Promise<{searchQuery: string, category: string|null, keywords: string[]}>}
  */
-export async function analyzeImageForVisualSearch(imageBuffer, mimeType, categories) {
+export async function analyzeImageForVisualSearch(
+  imageBuffer,
+  mimeType,
+  categories,
+) {
   const genAI = getClient();
   const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
@@ -325,7 +364,11 @@ IMPORTANT: Return ONLY valid JSON. No markdown.`;
 
   const result = await model.generateContent([prompt, imagePart]);
   const raw = result.response.text().trim();
-  const clean = raw.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/```$/, "").trim();
+  const clean = raw
+    .replace(/^```json\s*/, "")
+    .replace(/^```\s*/, "")
+    .replace(/```$/, "")
+    .trim();
 
   try {
     return JSON.parse(clean);
@@ -370,7 +413,11 @@ IMPORTANT: Return ONLY valid JSON. No markdown.`;
 
   const result = await model.generateContent(prompt);
   const raw = result.response.text().trim();
-  const clean = raw.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/```$/, "").trim();
+  const clean = raw
+    .replace(/^```json\s*/, "")
+    .replace(/^```\s*/, "")
+    .replace(/```$/, "")
+    .trim();
 
   try {
     return JSON.parse(clean);
