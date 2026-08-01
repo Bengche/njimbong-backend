@@ -35,6 +35,7 @@ import emailVerification from "./routes/emailVerification.js";
 import offers from "./routes/offers.js";
 import orders from "./routes/orders.js";
 import requests from "./routes/requests.js";
+import ai from "./routes/ai.js";
 import db from "./db.js";
 import {
   sendListingExpiryWarning,
@@ -179,6 +180,7 @@ app.use("/api", proxyImage);
 app.use("/api", offers);
 app.use("/api", orders);
 app.use("/api", requests);
+app.use("/api", ai);
 
 app.get("/", (req, res) => {
   res.status(200).json({ status: "ok" });
