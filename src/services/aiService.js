@@ -7,7 +7,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 // ── Utility ──────────────────────────────────────────────────────────────────
-// Use v1 (stable) endpoint — gemini-2.5-flash is available there on free tier
+// Use v1 (stable) endpoint — gemini-2.0-flash-lite is available there on free tier
 const AI_REQUEST_OPTIONS = { apiVersion: "v1" };
 
 function getClient() {
@@ -77,7 +77,7 @@ export async function streamChatResponse(message, history, pageContext, res) {
   const genAI = getClient();
   const model = genAI.getGenerativeModel(
     {
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash-lite",
       systemInstruction:
         NJIMBONG_SYSTEM_PROMPT +
         (pageContext ? `\n\nCURRENT USER CONTEXT: ${pageContext}` : ""),
@@ -125,7 +125,7 @@ export async function streamChatResponse(message, history, pageContext, res) {
  */
 export async function enhanceText(text, context, extraContext = "") {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }, AI_REQUEST_OPTIONS);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" }, AI_REQUEST_OPTIONS);
 
   const contextPrompts = {
     listing_description: `You are an expert marketplace copywriter for Njimbong, a Cameroonian online marketplace. Rewrite the following product listing description to be more compelling, clear, and SEO-friendly. Keep it honest, highlight key features, mention condition if relevant, and make it easy to scan. Write for Cameroonian buyers. Return ONLY a JSON object with keys "enhanced" (the improved text) and "tips" (array of 2-3 brief improvement tips you made).`,
@@ -174,7 +174,7 @@ IMPORTANT: Return ONLY valid JSON, nothing else. No markdown. No explanation.`;
  */
 export async function analyzeListingImage(imageBuffer, mimeType, categories) {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }, AI_REQUEST_OPTIONS);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" }, AI_REQUEST_OPTIONS);
 
   const categoryList = categories.map((c) => `${c.id}: ${c.name}`).join(", ");
 
@@ -227,7 +227,7 @@ IMPORTANT: Return ONLY valid JSON. No markdown. No explanation outside the JSON.
  */
 export async function summarizeConversation(messages) {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }, AI_REQUEST_OPTIONS);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" }, AI_REQUEST_OPTIONS);
 
   const transcript = messages
     .filter((m) => m.content && m.message_type === "text")
@@ -290,7 +290,7 @@ export async function getSearchSuggestions(
   recentSearches = [],
 ) {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }, AI_REQUEST_OPTIONS);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" }, AI_REQUEST_OPTIONS);
 
   const categoryNames = categories.map((c) => c.name).join(", ");
 
@@ -341,7 +341,7 @@ export async function analyzeImageForVisualSearch(
   categories,
 ) {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }, AI_REQUEST_OPTIONS);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" }, AI_REQUEST_OPTIONS);
 
   const categoryNames = categories.map((c) => c.name).join(", ");
 
@@ -391,7 +391,7 @@ IMPORTANT: Return ONLY valid JSON. No markdown.`;
  */
 export async function generateSEODescription(listing) {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }, AI_REQUEST_OPTIONS);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" }, AI_REQUEST_OPTIONS);
 
   const prompt = `You are an SEO copywriter for Njimbong, Cameroon's premier online marketplace.
 
@@ -431,5 +431,6 @@ IMPORTANT: Return ONLY valid JSON. No markdown.`;
     return { description: "", seoTips: [] };
   }
 }
+
 
 
