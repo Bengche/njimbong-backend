@@ -236,8 +236,6 @@ router.get("/requests/mine", authMiddleware, async (req, res) => {
        ORDER BY r.created_at DESC`,
       [req.user.id],
     );
-      [req.user.id],
-    );
     res.json({ requests: result.rows });
   } catch (err) {
     console.error("[Requests] GET /requests/mine:", err.message);
