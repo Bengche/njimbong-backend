@@ -618,7 +618,28 @@ router.post("/payments/dispute", authMiddleware, async (req, res) => {
     const displayId = order.order_reference ?? order_id;
     const listing = { title: order.listing_title ?? "your listing" };
     const buyer = { name: order.buyer_name, email: order.buyer_email };
-    const seller = { name: order.seller_name, email: order.seller_email };
+
+    // Resolve seller email — primary from JOIN, fallback to direct users query
+    let sellerEmail = order.seller_email;
+    if (!sellerEmail) {
+      try {
+        const { rows: sellerRows } = await db.query(
+          `SELECT email FROM users WHERE id = $1`,
+          [order.seller_id],
+        );
+        sellerEmail = sellerRows[0]?.email ?? null;
+        console.log(
+          `[Dispute] seller_email was missing from order row; fetched directly: ${sellerEmail}`,
+        );
+      } catch (e) {
+        console.error("[Dispute] fallback seller email fetch failed:", e.message);
+      }
+    }
+    const seller = { name: order.seller_name, email: sellerEmail };
+
+    console.log(
+      `[Dispute] order ${order_id} — buyer: ${buyer.email} | seller: ${seller.email} | invoice: ${order.fonlok_invoice_id}`,
+    );
 
     // In-app notification — seller
     await db.query(
