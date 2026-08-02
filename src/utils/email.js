@@ -1255,15 +1255,19 @@ export async function sendDisputeResolvedSeller(
       : "Dispute Outcome — Njimbong",
     `
     <p class="greeting">
-      ${wonDispute
-        ? `${seller.name}, the dispute has been resolved in your favour.`
-        : `${seller.name}, the dispute on your order has been resolved.`}
+      ${
+        wonDispute
+          ? `${seller.name}, the dispute has been resolved in your favour.`
+          : `${seller.name}, the dispute on your order has been resolved.`
+      }
     </p>
 
     <p class="text">
-      ${wonDispute
-        ? `Fonlok's support team has reviewed the dispute and determined that the funds should be released to you. <strong>${fmtAmount} ${currency}</strong> has been dispatched to your Mobile Money number.`
-        : `Fonlok's support team has reviewed the dispute and determined that a refund should be issued to the buyer. The funds held in escrow have been returned to the buyer's Mobile Money number.`}
+      ${
+        wonDispute
+          ? `Fonlok's support team has reviewed the dispute and determined that the funds should be released to you. <strong>${fmtAmount} ${currency}</strong> has been dispatched to your Mobile Money number.`
+          : `Fonlok's support team has reviewed the dispute and determined that a refund should be issued to the buyer. The funds held in escrow have been returned to the buyer's Mobile Money number.`
+      }
     </p>
 
     <div class="${wonDispute ? "info-box" : "info-box-amber"}">
@@ -1287,17 +1291,23 @@ export async function sendDisputeResolvedSeller(
           </span>
         </span>
       </div>
-      ${wonDispute ? `<div class="info-row">
+      ${
+        wonDispute
+          ? `<div class="info-row">
         <span class="info-label">Amount Sent</span>
         <span class="info-value"><strong>${fmtAmount} ${currency}</strong></span>
-      </div>` : ""}
+      </div>`
+          : ""
+      }
       <div class="info-row">
         <span class="info-label">Resolved At</span>
         <span class="info-value">${new Date().toUTCString()}</span>
       </div>
     </div>
 
-    ${wonDispute ? `
+    ${
+      wonDispute
+        ? `
     <div class="info-box-blue">
       <p style="margin:0;font-size:14px;color:#1e3a5f;line-height:1.7;">
         The funds have been sent via Mobile Money. Please allow a few minutes for
@@ -1306,14 +1316,16 @@ export async function sendDisputeResolvedSeller(
         <a href="mailto:support@fonlok.com" style="color:#2563eb;">support@fonlok.com</a>
         with your <strong>Fonlok Invoice ID</strong>.
       </p>
-    </div>` : `
+    </div>`
+        : `
     <div class="info-box-amber">
       <p style="margin:0;font-size:14px;color:#78350f;line-height:1.7;">
         If you believe this decision is incorrect, contact Fonlok at
         <a href="mailto:support@fonlok.com" style="color:#b45309;">support@fonlok.com</a>
         and quote your <strong>Fonlok Invoice ID</strong> to request a review.
       </p>
-    </div>`}
+    </div>`
+    }
 
     <hr class="divider"/>
     <p class="meta">
@@ -1347,20 +1359,22 @@ export async function sendDisputeResolvedBuyer(
   const wonDispute = decision === "buyer";
   const fmtAmount = Number(amountDisbursed).toLocaleString("en-US");
   const html = wrap(
-    wonDispute
-      ? "Refund Processed — Njimbong"
-      : "Dispute Outcome — Njimbong",
+    wonDispute ? "Refund Processed — Njimbong" : "Dispute Outcome — Njimbong",
     `
     <p class="greeting">
-      ${wonDispute
-        ? `${buyer.name}, your refund has been processed.`
-        : `${buyer.name}, the dispute on your order has been resolved.`}
+      ${
+        wonDispute
+          ? `${buyer.name}, your refund has been processed.`
+          : `${buyer.name}, the dispute on your order has been resolved.`
+      }
     </p>
 
     <p class="text">
-      ${wonDispute
-        ? `Fonlok's support team has reviewed the dispute and determined that a refund should be issued to you. <strong>${fmtAmount} ${currency}</strong> has been dispatched to your Mobile Money number.`
-        : `Fonlok's support team has reviewed the dispute and determined that the funds should be released to the seller. The escrow funds have been sent to the seller's Mobile Money number.`}
+      ${
+        wonDispute
+          ? `Fonlok's support team has reviewed the dispute and determined that a refund should be issued to you. <strong>${fmtAmount} ${currency}</strong> has been dispatched to your Mobile Money number.`
+          : `Fonlok's support team has reviewed the dispute and determined that the funds should be released to the seller. The escrow funds have been sent to the seller's Mobile Money number.`
+      }
     </p>
 
     <div class="${wonDispute ? "info-box" : "info-box-amber"}">
@@ -1384,17 +1398,23 @@ export async function sendDisputeResolvedBuyer(
           </span>
         </span>
       </div>
-      ${wonDispute ? `<div class="info-row">
+      ${
+        wonDispute
+          ? `<div class="info-row">
         <span class="info-label">Refund Amount</span>
         <span class="info-value"><strong>${fmtAmount} ${currency}</strong></span>
-      </div>` : ""}
+      </div>`
+          : ""
+      }
       <div class="info-row">
         <span class="info-label">Resolved At</span>
         <span class="info-value">${new Date().toUTCString()}</span>
       </div>
     </div>
 
-    ${wonDispute ? `
+    ${
+      wonDispute
+        ? `
     <div class="info-box-blue">
       <p style="margin:0;font-size:14px;color:#1e3a5f;line-height:1.7;">
         The refund has been sent via Mobile Money. Please allow a few minutes for
@@ -1403,14 +1423,16 @@ export async function sendDisputeResolvedBuyer(
         <a href="mailto:support@fonlok.com" style="color:#2563eb;">support@fonlok.com</a>
         with your <strong>Fonlok Invoice ID</strong>.
       </p>
-    </div>` : `
+    </div>`
+        : `
     <div class="info-box-amber">
       <p style="margin:0;font-size:14px;color:#78350f;line-height:1.7;">
         If you believe this decision is incorrect, contact Fonlok at
         <a href="mailto:support@fonlok.com" style="color:#b45309;">support@fonlok.com</a>
         and quote your <strong>Fonlok Invoice ID</strong> to request a review.
       </p>
-    </div>`}
+    </div>`
+    }
 
     <hr class="divider"/>
     <p class="meta">

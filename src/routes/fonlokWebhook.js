@@ -438,10 +438,9 @@ async function handleDisputeResolved(event, invoiceId) {
 
   // Update listing status — sold if seller won, back to available if buyer won (refund)
   if (decision === "seller") {
-    await db.query(
-      `UPDATE userlistings SET status = 'Sold' WHERE id = $1`,
-      [order.listing_id],
-    );
+    await db.query(`UPDATE userlistings SET status = 'Sold' WHERE id = $1`, [
+      order.listing_id,
+    ]);
   } else {
     await db.query(
       `UPDATE userlistings SET status = 'Available' WHERE id = $1`,
@@ -474,8 +473,14 @@ async function handleDisputeResolved(event, invoiceId) {
   }
 
   const listing = { title: details?.listing_title ?? "your listing" };
-  const buyer = { name: details?.buyer_name ?? "Buyer", email: details?.buyer_email };
-  const seller = { name: details?.seller_name ?? "Seller", email: details?.seller_email };
+  const buyer = {
+    name: details?.buyer_name ?? "Buyer",
+    email: details?.buyer_email,
+  };
+  const seller = {
+    name: details?.seller_name ?? "Seller",
+    email: details?.seller_email,
+  };
 
   // ── In-app notifications ──────────────────────────────────────────────────
   const sellerMsg =
@@ -504,19 +509,24 @@ async function handleDisputeResolved(event, invoiceId) {
   // ── Push notifications ────────────────────────────────────────────────────
   const sellerPush = buildNotificationPayload({
     type: "payment",
-    title: decision === "seller" ? "Dispute resolved in your favour" : "Dispute outcome",
-    body: decision === "seller"
-      ? `${amountDisbursed.toLocaleString()} ${currency} has been sent to your Mobile Money.`
-      : "Fonlok reviewed the dispute and issued a refund to the buyer.",
+    title:
+      decision === "seller"
+        ? "Dispute resolved in your favour"
+        : "Dispute outcome",
+    body:
+      decision === "seller"
+        ? `${amountDisbursed.toLocaleString()} ${currency} has been sent to your Mobile Money.`
+        : "Fonlok reviewed the dispute and issued a refund to the buyer.",
     relatedId: String(order.id),
     relatedType: "order",
   });
   const buyerPush = buildNotificationPayload({
     type: "payment",
     title: decision === "buyer" ? "Refund processed" : "Dispute outcome",
-    body: decision === "buyer"
-      ? `${amountDisbursed.toLocaleString()} ${currency} has been refunded to your Mobile Money.`
-      : "Fonlok reviewed the dispute and released the funds to the seller.",
+    body:
+      decision === "buyer"
+        ? `${amountDisbursed.toLocaleString()} ${currency} has been refunded to your Mobile Money.`
+        : "Fonlok reviewed the dispute and released the funds to the seller.",
     relatedId: String(order.id),
     relatedType: "order",
   });
@@ -528,15 +538,23 @@ async function handleDisputeResolved(event, invoiceId) {
 
   // ── Emails ────────────────────────────────────────────────────────────────
   sendDisputeResolvedSeller(
-    seller, listing, displayId, invoiceId, decision, amountDisbursed, currency,
-  ).catch((e) =>
-    console.error("[email] dispute_resolved seller:", e.message),
-  );
+    seller,
+    listing,
+    displayId,
+    invoiceId,
+    decision,
+    amountDisbursed,
+    currency,
+  ).catch((e) => console.error("[email] dispute_resolved seller:", e.message));
   sendDisputeResolvedBuyer(
-    buyer, listing, displayId, invoiceId, decision, amountDisbursed, currency,
-  ).catch((e) =>
-    console.error("[email] dispute_resolved buyer:", e.message),
-  );
+    buyer,
+    listing,
+    displayId,
+    invoiceId,
+    decision,
+    amountDisbursed,
+    currency,
+  ).catch((e) => console.error("[email] dispute_resolved buyer:", e.message));
 }
 
 // ─── payment.initiated ────────────────────────────────────────────────────────
