@@ -17,6 +17,59 @@ import {
 
 const router = express.Router();
 
+// ─── Helper: notify all followers when a seller goes live with a listing ──────
+const notifyFollowersOfNewListing = async (sellerId, sellerName, listing) => {
+  try {
+    const followersRes = await db.query(
+      `SELECT f.follower_id, u.name AS follower_name, u.email AS follower_email
+       FROM seller_followers f
+       JOIN users u ON u.id = f.follower_id
+       WHERE f.seller_id = $1`,
+      [sellerId],
+    );
+    if (!followersRes.rows.length) return;
+
+    const price = `${Number(listing.price).toLocaleString()} ${listing.currency}`;
+
+    await Promise.all(
+      followersRes.rows.map(async (follower) => {
+        // 1. In-app notification (bell icon)
+        await db.query(
+          `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype, createdat)
+           VALUES ($1, $2, $3, 'new_listing_from_followed', $4, 'listing', NOW())`,
+          [
+            follower.follower_id,
+            `${sellerName} posted a new listing`,
+            `"${listing.title}" — ${price}`,
+            listing.id,
+          ],
+        ).catch(() => {}); // never block on notification failure
+
+        // 2. Web push notification
+        sendPushToUser(
+          follower.follower_id,
+          buildNotificationPayload({
+            type: "new_listing_from_followed",
+            title: `${sellerName} posted a new listing`,
+            body: `"${listing.title}" — ${price}`,
+            relatedId: listing.id,
+            relatedType: "listing",
+          }),
+        );
+
+        // 3. Email
+        sendNewListingFromFollowed(
+          { name: follower.follower_name, email: follower.follower_email },
+          { id: sellerId, name: sellerName },
+          listing,
+        );
+      }),
+    );
+  } catch (err) {
+    console.warn("[Listings] Follower notify error:", err.message);
+  }
+};
+
 // ─── One-time DB setup ────────────────────────────────────────────────────────
 let _colsEnsured = false;
 const ensureListingColumns = async () => {
@@ -239,37 +292,11 @@ router.post(
         sendListingSubmittedAdmin(posterResult.rows[0], listingResult.rows[0]);
 
         // Notify followers of this seller
-        try {
-          const followersRes = await db.query(
-            `SELECT f.follower_id, u.name AS follower_name, u.email AS follower_email
-             FROM seller_followers f
-             JOIN users u ON u.id = f.follower_id
-             WHERE f.seller_id = $1`,
-            [req.user.id],
-          );
-          const seller = posterResult.rows[0];
-          const listing = listingResult.rows[0];
-          for (const follower of followersRes.rows) {
-            sendPushToUser(
-              follower.follower_id,
-              buildNotificationPayload("new_listing_from_followed", {
-                title: `${seller.name} posted a new listing`,
-                body: `"${listing.title}" — ${Number(listing.price).toLocaleString()} ${listing.currency}`,
-                url: `/listing/${listing.id}`,
-              }),
-            );
-            sendNewListingFromFollowed(
-              { name: follower.follower_name, email: follower.follower_email },
-              { id: seller.id, name: seller.name },
-              listing,
-            );
-          }
-        } catch (followerErr) {
-          console.warn(
-            "[Listings] Follower notify error:",
-            followerErr.message,
-          );
-        }
+        notifyFollowersOfNewListing(
+          req.user.id,
+          posterResult.rows[0].name,
+          listingResult.rows[0],
+        );
       }
 
       res.status(201).json({
@@ -781,6 +808,17 @@ router.put(
        RETURNING *`,
         [id],
       );
+
+      // Notify followers that this seller's listing is back live
+      const renewedListing = result.rows[0];
+      const sellerRes = await db.query(
+        "SELECT id, name FROM users WHERE id = $1",
+        [userId],
+      ).catch(() => ({ rows: [] }));
+      if (sellerRes.rows.length > 0) {
+        notifyFollowersOfNewListing(userId, sellerRes.rows[0].name, renewedListing);
+      }
+
       res.status(200).json({
         message: "Listing renewed and resubmitted for review",
         listing: result.rows[0],
@@ -900,36 +938,7 @@ router.put(
         sendListingSubmittedAdmin(posterResult.rows[0], result.rows[0]);
 
         // Notify followers
-        try {
-          const followersRes = await db.query(
-            `SELECT f.follower_id, u.name AS follower_name, u.email AS follower_email
-             FROM seller_followers f
-             JOIN users u ON u.id = f.follower_id
-             WHERE f.seller_id = $1`,
-            [userId],
-          );
-          const seller = posterResult.rows[0];
-          for (const follower of followersRes.rows) {
-            sendPushToUser(
-              follower.follower_id,
-              buildNotificationPayload("new_listing_from_followed", {
-                title: `${seller.name} posted a new listing`,
-                body: `"${listing.title}"`,
-                url: `/listing/${id}`,
-              }),
-            );
-            sendNewListingFromFollowed(
-              { name: follower.follower_name, email: follower.follower_email },
-              { id: seller.id, name: seller.name },
-              listing,
-            );
-          }
-        } catch (followerErr) {
-          console.warn(
-            "[Listings] Publish follower notify error:",
-            followerErr.message,
-          );
-        }
+        notifyFollowersOfNewListing(userId, posterResult.rows[0].name, result.rows[0]);
       }
 
       res.json({
