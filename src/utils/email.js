@@ -9,15 +9,28 @@
  */
 
 import sgMail from "@sendgrid/mail";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load logo once at startup for inline CID attachment — works in all email clients
+const LOGO_CID = "njimbong-logo";
+let LOGO_BASE64 = "";
+try {
+  LOGO_BASE64 = fs
+    .readFileSync(path.join(__dirname, "../../assets/logo.png"))
+    .toString("base64");
+} catch {
+  console.warn("[Email] assets/logo.png not found — logo will not appear in emails.");
+}
 
 const FROM = "Njimbong <support@njimbong.com>";
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "support@njimbong.com";
 const APP_URL =
   process.env.FRONTEND_URL?.split(",")[0].trim() || "https://njimbong.com";
-// Use the same domain as APP_URL so the logo always resolves correctly.
-// The /icon-192x192.png file is in Next.js public/ and is always served at root.
-const BRAND_LOGO_URL =
-  process.env.EMAIL_LOGO_URL?.trim() || `${APP_URL}/icon-192x192.png`;
 
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -130,7 +143,7 @@ const wrap = (title, body) => `<!DOCTYPE html>
         <tr>
           <td class="eml-header" style="background:linear-gradient(150deg,#18a34a 0%,#053d2c 100%);padding:40px 52px 36px;text-align:center;">
             <!--[if !mso]><!-->
-            <img src="${BRAND_LOGO_URL}" alt="Njimbong" width="56" height="56"
+            <img src="cid:${LOGO_CID}" alt="Njimbong" width="56" height="56"
                  style="display:block;margin:0 auto 16px;border-radius:14px;border:2px solid rgba(255,255,255,0.2);width:56px;height:56px;" />
             <!--<![endif]-->
             <!--[if mso]>
@@ -178,8 +191,25 @@ const wrap = (title, body) => `<!DOCTYPE html>
 
 async function send({ to, subject, html }) {
   if (!process.env.SENDGRID_API_KEY) return;
+  const msg = {
+    from: FROM,
+    to,
+    subject,
+    html,
+  };
+  if (LOGO_BASE64) {
+    msg.attachments = [
+      {
+        content: LOGO_BASE64,
+        filename: "logo.png",
+        type: "image/png",
+        disposition: "inline",
+        content_id: LOGO_CID,
+      },
+    ];
+  }
   try {
-    await sgMail.send({ from: FROM, to, subject, html });
+    await sgMail.send(msg);
   } catch (err) {
     console.error(
       `[Email] Failed to send "${subject}" to ${to}:`,
