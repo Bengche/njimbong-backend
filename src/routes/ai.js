@@ -147,6 +147,7 @@ router.post(
 
     const validContexts = [
       "listing_description",
+      "request_description",
       "listing_title",
       "chat_message",
       "dispute",

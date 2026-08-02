@@ -125,10 +125,48 @@ export async function streamChatResponse(message, history, pageContext, res) {
  */
 export async function enhanceText(text, context, extraContext = "") {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" }, AI_REQUEST_OPTIONS);
+  const model = genAI.getGenerativeModel(
+    { model: "gemini-3.5-flash" },
+    AI_REQUEST_OPTIONS,
+  );
 
   const contextPrompts = {
-    listing_description: `You are an expert marketplace copywriter for Njimbong, a Cameroonian online marketplace. Rewrite the following product listing description to be more compelling, clear, and SEO-friendly. Keep it honest, highlight key features, mention condition if relevant, and make it easy to scan. Write for Cameroonian buyers. Return ONLY a JSON object with keys "enhanced" (the improved text) and "tips" (array of 2-3 brief improvement tips you made).`,
+    listing_description: `You are an expert marketplace copywriter for Njimbong, a Cameroonian online marketplace. Rewrite the following product listing description into a COMPREHENSIVE, fully-detailed listing. Your goal is maximum information for the buyer — they should need zero follow-up questions after reading it.
+
+Cover EVERY relevant detail you can infer or that is mentioned, including:
+- Exact product name, brand, model, and year/version if applicable
+- All physical attributes: color, size/dimensions, weight, material
+- Full condition description: any scratches, dents, wear, defects, or repairs — be honest and specific
+- All features and specifications that matter to a buyer
+- Everything included in the sale: accessories, cables, box, manuals, spare parts, etc.
+- What is NOT included (if relevant)
+- Functional status: working perfectly, minor issues, needs repair, etc.
+- Age of the item and usage history if inferable
+- Why it is being sold (if mentioned)
+- Ideal use cases or who would benefit from this item
+- Any warranty remaining or service history
+- Location context for pickup/delivery (if mentioned)
+
+Write in clear paragraphs or well-structured bullet points. Be honest — never invent details not present in the original. Make it easy to scan. Optimize naturally for Cameroonian marketplace search. The seller can edit or trim the output — your job is to be thorough, not brief.
+
+Return ONLY a JSON object with keys "enhanced" (the full improved text) and "tips" (array of 2-3 specific improvement tips based on what was missing or weak in the original).`,
+    request_description: `You are an expert marketplace assistant for Njimbong, a Cameroonian online marketplace. Rewrite the following buyer request description to be COMPREHENSIVE and fully-detailed, so sellers know exactly what the buyer needs. Your goal is maximum clarity — a seller should be able to fulfil this request without a single follow-up question.
+
+Cover EVERY relevant detail you can infer or that is mentioned, including:
+- Exactly what item or service is being requested (brand, model, version, or specifications if mentioned)
+- Required physical attributes: color, size, dimensions, material preferences
+- Required condition: new only, used acceptable, any condition, etc.
+- Budget range or price expectations if mentioned
+- Quantity needed
+- Location or delivery preferences (willing to travel, Douala/Yaoundé only, etc.)
+- Urgency or deadline for the need
+- What the buyer will use it for (helps sellers understand the requirement)
+- Any deal-breakers or things the buyer will NOT accept
+- Preferred payment method if mentioned
+
+Be honest — never invent details not in the original. Structure clearly. The buyer can edit the output — your job is to be thorough, not brief.
+
+Return ONLY a JSON object with keys "enhanced" (the full improved request text) and "tips" (array of 2-3 specific tips on how this request could attract better seller responses).`,
     listing_title: `You are an expert marketplace copywriter. Rewrite this product listing title to be clear, searchable, and compelling. Include brand name, model, and key spec if relevant. Max 80 characters. Cameroonian marketplace context. Return ONLY JSON with "enhanced" and "tips".`,
     chat_message: `Improve this marketplace chat message to be more professional, clear, and polite while keeping the original intent. Keep it concise. Return ONLY JSON with "enhanced" (improved message) and "tips" (1-2 brief notes).`,
     dispute: `Rewrite this dispute message to be professional, factual, and persuasive. Keep a neutral tone. Return ONLY JSON with "enhanced" and "tips".`,
@@ -174,20 +212,35 @@ IMPORTANT: Return ONLY valid JSON, nothing else. No markdown. No explanation.`;
  */
 export async function analyzeListingImage(imageBuffer, mimeType, categories) {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" }, AI_REQUEST_OPTIONS);
+  const model = genAI.getGenerativeModel(
+    { model: "gemini-3.5-flash" },
+    AI_REQUEST_OPTIONS,
+  );
 
   const categoryList = categories.map((c) => `${c.id}: ${c.name}`).join(", ");
 
   const prompt = `You are an expert marketplace listing assistant for Njimbong, a Cameroonian online marketplace.
 
-Analyze this product image and extract listing details. Be specific and professional.
+Analyze this product image and generate a COMPLETE, fully-detailed listing. The description must be exhaustive — a buyer should have zero follow-up questions after reading it.
 
 Available categories (id: name): ${categoryList}
+
+For the description field, cover ALL of the following that are visible or inferable from the image:
+- Brand, model, version, and year if identifiable
+- All physical attributes: color(s), size/dimensions, material, weight
+- Exact condition: visible scratches, wear, dents, discoloration, or pristine state — be honest and specific
+- All visible features, ports, buttons, accessories, or components shown
+- What appears to be included (e.g., cables, remote, box, manual, spare parts)
+- Functional use cases and who would want this item
+- Any visible text, labels, serial markings, or specifications on the product
+- SEO-relevant keywords for the Cameroonian market woven in naturally
+
+Write the description in clear paragraphs or structured bullet points. Be honest — never invent details not visible. Be thorough — the seller can trim, but the AI must not be vague. Aim for at least 5-8 sentences or equivalent bullet points.
 
 Return ONLY a valid JSON object with these EXACT keys:
 {
   "title": "Clear, specific product title (max 80 chars, include brand/model if visible)",
-  "description": "Professional product description (3-5 sentences, mention visible features, condition, and any relevant specs). Slightly SEO-optimized for the Cameroonian market.",
+  "description": "Full, comprehensive product description as described above — thorough, structured, SEO-friendly",
   "condition": "new" or "like new" or "good" or "fair" or "poor",
   "categoryId": number (the best matching category id from the list above, or null if none fits),
   "suggestedPriceMin": number (minimum suggested price in XAF based on Cameroonian market, integer only),
@@ -227,7 +280,10 @@ IMPORTANT: Return ONLY valid JSON. No markdown. No explanation outside the JSON.
  */
 export async function summarizeConversation(messages) {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" }, AI_REQUEST_OPTIONS);
+  const model = genAI.getGenerativeModel(
+    { model: "gemini-3.5-flash" },
+    AI_REQUEST_OPTIONS,
+  );
 
   const transcript = messages
     .filter((m) => m.content && m.message_type === "text")
@@ -290,7 +346,10 @@ export async function getSearchSuggestions(
   recentSearches = [],
 ) {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" }, AI_REQUEST_OPTIONS);
+  const model = genAI.getGenerativeModel(
+    { model: "gemini-3.5-flash" },
+    AI_REQUEST_OPTIONS,
+  );
 
   const categoryNames = categories.map((c) => c.name).join(", ");
 
@@ -341,7 +400,10 @@ export async function analyzeImageForVisualSearch(
   categories,
 ) {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" }, AI_REQUEST_OPTIONS);
+  const model = genAI.getGenerativeModel(
+    { model: "gemini-3.5-flash" },
+    AI_REQUEST_OPTIONS,
+  );
 
   const categoryNames = categories.map((c) => c.name).join(", ");
 
@@ -391,7 +453,10 @@ IMPORTANT: Return ONLY valid JSON. No markdown.`;
  */
 export async function generateSEODescription(listing) {
   const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" }, AI_REQUEST_OPTIONS);
+  const model = genAI.getGenerativeModel(
+    { model: "gemini-3.5-flash" },
+    AI_REQUEST_OPTIONS,
+  );
 
   const prompt = `You are an SEO copywriter for Njimbong, Cameroon's premier online marketplace.
 
@@ -402,12 +467,14 @@ Write an SEO-optimized product listing description for:
 - Price: ${listing.price} XAF
 - City: ${listing.city}, Cameroon
 
-The description should be:
-- 4-6 sentences
-- Include naturally placed keywords for search
+The description should be COMPREHENSIVE and fully-detailed — the seller can edit or trim it, but the AI must not be brief:
+- At least 6-8 sentences or equivalent structured paragraphs
+- Cover all relevant product attributes: features, specifications, condition, size, color, material
+- Include everything a buyer would want to know before purchasing
 - Mention condition, city, and price context
-- Written for Cameroonian buyers
-- Professional but accessible
+- Include naturally placed SEO keywords for the Cameroonian market
+- Written for Cameroonian buyers, professional but accessible
+- Structured for easy scanning (short paragraphs or bullets as appropriate)
 
 Return ONLY valid JSON:
 {
@@ -431,7 +498,3 @@ IMPORTANT: Return ONLY valid JSON. No markdown.`;
     return { description: "", seoTips: [] };
   }
 }
-
-
-
-
