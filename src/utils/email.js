@@ -1071,35 +1071,75 @@ export async function sendDisputeConfirmation(
   reason,
   fonlokInvoiceId,
 ) {
+  const fonlokMailto = `mailto:support@fonlok.com?subject=Dispute%20follow-up%20%E2%80%94%20Invoice%20${encodeURIComponent(fonlokInvoiceId ?? orderId)}`;
   const html = wrap(
     "Dispute Submitted — Njimbong",
     `
-    <p class="greeting">${user.name}, your dispute has been registered.</p>
-    <p class="text">Your dispute has been submitted to <strong>Fonlok</strong>, the escrow provider that holds the payment. Fonlok is responsible for reviewing and resolving all disputes. The funds remain <strong>frozen</strong> until a decision is reached.</p>
+    <p class="greeting">${user.name}, your dispute has been submitted.</p>
+
+    <p class="text">
+      We have registered your dispute and forwarded it to <strong>Fonlok</strong>,
+      the licensed escrow provider that holds the payment for this order. Fonlok is
+      solely responsible for investigating and resolving all escrow disputes. The funds
+      are <strong>frozen</strong> and will remain so until Fonlok reaches a decision.
+    </p>
+
     <div class="info-box">
-      <div class="info-row"><span class="info-label">Njimbong Order</span><span class="info-value">#${orderId}</span></div>
-      <div class="info-row"><span class="info-label">Fonlok Invoice ID</span><span class="info-value" style="font-family:monospace;font-size:13px;">${fonlokInvoiceId ?? "N/A"}</span></div>
-      <div class="info-row"><span class="info-label">Listing</span><span class="info-value">${listing.title}</span></div>
+      <div class="info-row">
+        <span class="info-label">Order Reference</span>
+        <span class="info-value">#${orderId}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Fonlok Invoice ID</span>
+        <span class="info-value" style="font-family:monospace;font-size:13px;letter-spacing:0.02em;">${fonlokInvoiceId ?? "N/A"}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Item</span>
+        <span class="info-value">${listing.title}</span>
+      </div>
       ${reason ? `<div class="info-row"><span class="info-label">Your Reason</span><span class="info-value">${reason}</span></div>` : ""}
-      <div class="info-row"><span class="info-label">Status</span><span class="info-value"><span class="badge badge-red">Under Dispute</span></span></div>
-      <div class="info-row"><span class="info-label">Filed At</span><span class="info-value">${new Date().toUTCString()}</span></div>
+      <div class="info-row">
+        <span class="info-label">Status</span>
+        <span class="info-value"><span class="badge badge-red">Under Dispute</span></span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Submitted</span>
+        <span class="info-value">${new Date().toUTCString()}</span>
+      </div>
     </div>
-    <div class="info-box">
-      <p style="margin:0 0 10px;font-weight:600;color:#1a1a1a;">What happens next</p>
-      <ul style="margin:0;padding-left:20px;color:#374151;line-height:1.8;">
-        <li>Fonlok's support team will investigate the dispute.</li>
-        <li>Both you and the seller may be contacted for evidence (photos, messages, receipts).</li>
-        <li>Fonlok will decide whether to release the funds to the seller or refund you.</li>
+
+    <div class="info-box-amber">
+      <p style="margin:0 0 12px;font-size:14px;font-weight:700;color:#92400e;">What happens next</p>
+      <ul style="margin:0;padding-left:20px;font-size:14px;color:#374151;line-height:1.9;">
+        <li style="margin-bottom:7px;">Fonlok&rsquo;s support team will review your dispute and the full transaction record.</li>
+        <li style="margin-bottom:7px;">Both you and the seller may be contacted for supporting evidence &mdash; keep any photos, messages, or receipts ready.</li>
+        <li style="margin-bottom:7px;">Fonlok will decide whether to release the funds to the seller or issue you a refund.</li>
         <li>No further action is required from you at this stage.</li>
       </ul>
     </div>
+
+    <p class="text" style="margin-top:24px;">
+      If you need to follow up or submit additional evidence, contact Fonlok directly
+      using the button below. Always quote your <strong>Fonlok Invoice ID</strong> so
+      their team can locate your case immediately.
+    </p>
+
+    <p style="text-align:center;margin:28px 0;">
+      <a href="${fonlokMailto}" class="btn">Contact Fonlok Support</a>
+    </p>
+
     <hr class="divider"/>
-    <p class="meta">To follow up directly with Fonlok, email <a href="mailto:support@fonlok.com">support@fonlok.com</a> and quote your <strong>Fonlok Invoice ID: ${fonlokInvoiceId ?? orderId}</strong>.</p>
+    <p class="meta">
+      Reference for Fonlok: <strong>Invoice ID&nbsp;${fonlokInvoiceId ?? "N/A"}</strong>
+      &nbsp;&middot;&nbsp; Njimbong Order <strong>#${orderId}</strong><br/>
+      For Njimbong platform queries, contact
+      <a href="mailto:support@njimbong.com">support@njimbong.com</a>.
+    </p>
   `,
   );
   await send({
     to: user.email,
-    subject: `Your dispute has been submitted — Order #${orderId}`,
+    subject: `Your dispute has been submitted — Order #${orderId} — Njimbong`,
     html,
   });
 }
@@ -1112,30 +1152,75 @@ export async function sendDisputeFiledToSeller(
   reason,
   fonlokInvoiceId,
 ) {
+  const fonlokMailto = `mailto:support@fonlok.com?subject=Dispute%20response%20%E2%80%94%20Invoice%20${encodeURIComponent(fonlokInvoiceId ?? orderId)}`;
   const html = wrap(
     "Dispute Raised on Your Order — Njimbong",
     `
     <p class="greeting">${seller.name}, a dispute has been raised on one of your orders.</p>
-    <p class="text">The buyer for your listing <strong>${listing.title}</strong> has opened a dispute. The payment held in escrow by <strong>Fonlok</strong> has been <strong>frozen</strong> pending investigation. Fonlok manages all escrow payments and is responsible for resolving this dispute.</p>
+
+    <p class="text">
+      The buyer for your listing <strong>${listing.title}</strong> has opened a dispute
+      before releasing the escrow funds. The payment held by <strong>Fonlok</strong>
+      has been <strong>frozen</strong> and will remain so while the matter is under
+      review. Fonlok manages all escrow payments and is solely responsible for
+      resolving this dispute.
+    </p>
+
     <div class="info-box-red">
-      <div class="info-row"><span class="info-label">Njimbong Order</span><span class="info-value">#${orderId}</span></div>
-      <div class="info-row"><span class="info-label">Fonlok Invoice ID</span><span class="info-value" style="font-family:monospace;font-size:13px;">${fonlokInvoiceId ?? "N/A"}</span></div>
-      <div class="info-row"><span class="info-label">Listing</span><span class="info-value">${listing.title}</span></div>
-      <div class="info-row"><span class="info-label">Raised by</span><span class="info-value">${buyer.name}</span></div>
-      ${reason ? `<div class="info-row"><span class="info-label">Reason Given</span><span class="info-value">${reason}</span></div>` : ""}
-      <div class="info-row"><span class="info-label">Status</span><span class="info-value"><span class="badge badge-red">Under Dispute</span></span></div>
+      <div class="info-row">
+        <span class="info-label">Order Reference</span>
+        <span class="info-value">#${orderId}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Fonlok Invoice ID</span>
+        <span class="info-value" style="font-family:monospace;font-size:13px;letter-spacing:0.02em;">${fonlokInvoiceId ?? "N/A"}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Item</span>
+        <span class="info-value">${listing.title}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Dispute Raised By</span>
+        <span class="info-value">${buyer.name}</span>
+      </div>
+      ${reason ? `<div class="info-row"><span class="info-label">Buyer's Reason</span><span class="info-value">${reason}</span></div>` : ""}
+      <div class="info-row">
+        <span class="info-label">Status</span>
+        <span class="info-value"><span class="badge badge-red">Under Dispute</span></span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Raised At</span>
+        <span class="info-value">${new Date().toUTCString()}</span>
+      </div>
     </div>
-    <div class="info-box">
-      <p style="margin:0 0 10px;font-weight:600;color:#1a1a1a;">What happens next</p>
-      <ul style="margin:0;padding-left:20px;color:#374151;line-height:1.8;">
-        <li>Fonlok's support team will review the dispute and may contact both parties for evidence.</li>
-        <li>Funds remain frozen until Fonlok reaches a decision — no action is required from you right now.</li>
-        <li>Gather any supporting evidence (photos, messages, delivery confirmation) in case Fonlok contacts you.</li>
-        <li>If the dispute is resolved in your favour, Fonlok will release the funds to your Mobile Money number.</li>
+
+    <div class="info-box-amber">
+      <p style="margin:0 0 12px;font-size:14px;font-weight:700;color:#92400e;">What happens next</p>
+      <ul style="margin:0;padding-left:20px;font-size:14px;color:#374151;line-height:1.9;">
+        <li style="margin-bottom:7px;">Fonlok&rsquo;s support team will review the full transaction and may contact both parties for evidence.</li>
+        <li style="margin-bottom:7px;">Start gathering supporting evidence now &mdash; photos, messages, delivery confirmation, or any proof of fulfilment.</li>
+        <li style="margin-bottom:7px;">Funds remain frozen until Fonlok reaches a decision. No payment action is required from you at this stage.</li>
+        <li>If the dispute is resolved in your favour, Fonlok will release the funds to your Mobile Money number promptly.</li>
       </ul>
     </div>
+
+    <p class="text" style="margin-top:24px;">
+      To present your case or submit evidence directly to Fonlok, use the button below.
+      Always include your <strong>Fonlok Invoice ID</strong> in your message so their
+      team can locate your case immediately.
+    </p>
+
+    <p style="text-align:center;margin:28px 0;">
+      <a href="${fonlokMailto}" class="btn">Contact Fonlok Support</a>
+    </p>
+
     <hr class="divider"/>
-    <p class="meta">To present your case directly to Fonlok, email <a href="mailto:support@fonlok.com">support@fonlok.com</a> and quote your <strong>Fonlok Invoice ID: ${fonlokInvoiceId ?? orderId}</strong>.</p>
+    <p class="meta">
+      Reference for Fonlok: <strong>Invoice ID&nbsp;${fonlokInvoiceId ?? "N/A"}</strong>
+      &nbsp;&middot;&nbsp; Njimbong Order <strong>#${orderId}</strong><br/>
+      For Njimbong platform queries, contact
+      <a href="mailto:support@njimbong.com">support@njimbong.com</a>.
+    </p>
   `,
   );
   await send({
