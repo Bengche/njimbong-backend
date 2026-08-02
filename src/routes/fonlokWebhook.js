@@ -6,7 +6,13 @@ import {
   sendPaymentConfirmedSeller,
   sendPaymentReleasedSeller,
   sendPaymentReleasedBuyer,
+  sendDisputeResolvedSeller,
+  sendDisputeResolvedBuyer,
 } from "../utils/email.js";
+import {
+  buildNotificationPayload,
+  sendPushToUser,
+} from "../utils/pushNotifications.js";
 
 const router = express.Router();
 
@@ -29,10 +35,16 @@ const _tablesReady = (async () => {
       CREATE INDEX IF NOT EXISTS idx_pwh_invoice
       ON processed_webhooks (invoice_id)
     `);
+    // Ensure dispute resolution columns exist on orders
+    await db.query(
+      `ALTER TABLE orders
+         ADD COLUMN IF NOT EXISTS dispute_outcome  VARCHAR(60),
+         ADD COLUMN IF NOT EXISTS amount_disbursed NUMERIC(12, 2)`,
+    );
   } catch (err) {
     // Non-fatal — worst case a retry event is double-processed once
     console.error(
-      "[FonlokWebhook] Could not create processed_webhooks table:",
+      "[FonlokWebhook] Could not initialise webhook tables/columns:",
       err.message,
     );
   }
@@ -139,6 +151,10 @@ async function handleFonlokEvent(event, eventType, invoiceId) {
 
     case "payment.disputed":
       await handlePaymentDisputed(invoiceId);
+      break;
+
+    case "payment.dispute_resolved":
+      await handleDisputeResolved(event, invoiceId);
       break;
 
     case "payment.initiated":
@@ -371,6 +387,156 @@ async function handlePaymentDisputed(invoiceId) {
     [invoiceId],
   );
   console.log(`[FonlokWebhook] Order disputed for invoice ${invoiceId}`);
+}
+
+// ─── payment.dispute_resolved ────────────────────────────────────────────────
+// Fires when the Fonlok admin makes a final decision on a disputed invoice.
+// By the time this event arrives, Campay has already transferred the funds.
+async function handleDisputeResolved(event, invoiceId) {
+  const claimed = await claimEvent(invoiceId, "payment.dispute_resolved");
+  if (!claimed) {
+    console.log(
+      `[FonlokWebhook] payment.dispute_resolved duplicate — skipping invoice ${invoiceId}`,
+    );
+    return;
+  }
+
+  const { decision, amount_disbursed, status: disputeStatus } = event;
+  const amountDisbursed = Number(amount_disbursed ?? 0);
+
+  // Determine the new order status from the decision
+  const newOrderStatus = decision === "seller" ? "released" : "refunded";
+  const disputeOutcome =
+    disputeStatus ??
+    (decision === "seller" ? "resolved_seller" : "resolved_buyer");
+
+  const { rows, rowCount } = await db.query(
+    `UPDATE orders
+     SET fonlok_status    = $1,
+         dispute_outcome  = $2,
+         amount_disbursed = $3,
+         updated_at       = NOW()
+     WHERE fonlok_invoice_id = $4
+       AND fonlok_status NOT IN ('released', 'refunded', 'cancelled')
+     RETURNING id, buyer_id, seller_id, listing_id, order_reference, currency`,
+    [newOrderStatus, disputeOutcome, amountDisbursed, invoiceId],
+  );
+
+  if (rowCount === 0) {
+    console.log(
+      `[FonlokWebhook] dispute_resolved: no updatable order for invoice ${invoiceId}`,
+    );
+    return;
+  }
+
+  const order = rows[0];
+  const displayId = order.order_reference ?? order.id;
+  const currency = order.currency ?? "XAF";
+  console.log(
+    `[FonlokWebhook] Order ${order.id} → ${newOrderStatus} (dispute decision: ${decision})`,
+  );
+
+  // Update listing status — sold if seller won, back to available if buyer won (refund)
+  if (decision === "seller") {
+    await db.query(
+      `UPDATE userlistings SET status = 'Sold' WHERE id = $1`,
+      [order.listing_id],
+    );
+  } else {
+    await db.query(
+      `UPDATE userlistings SET status = 'Available' WHERE id = $1`,
+      [order.listing_id],
+    );
+  }
+
+  // Fetch full user and listing details for notifications and emails
+  let details = null;
+  try {
+    const { rows: d } = await db.query(
+      `SELECT ul.title       AS listing_title,
+              b.name         AS buyer_name,
+              COALESCE(o.buyer_checkout_email, b.email) AS buyer_email,
+              s.name         AS seller_name,
+              s.email        AS seller_email
+       FROM orders o
+       JOIN userlistings ul ON ul.id     = o.listing_id
+       JOIN users b         ON b.id      = o.buyer_id
+       JOIN users s         ON s.id      = o.seller_id
+       WHERE o.id = $1`,
+      [order.id],
+    );
+    if (d.length > 0) details = d[0];
+  } catch (err) {
+    console.error(
+      "[FonlokWebhook] dispute_resolved: details query error:",
+      err.message,
+    );
+  }
+
+  const listing = { title: details?.listing_title ?? "your listing" };
+  const buyer = { name: details?.buyer_name ?? "Buyer", email: details?.buyer_email };
+  const seller = { name: details?.seller_name ?? "Seller", email: details?.seller_email };
+
+  // ── In-app notifications ──────────────────────────────────────────────────
+  const sellerMsg =
+    decision === "seller"
+      ? `The dispute on your order has been resolved in your favour. ${amountDisbursed.toLocaleString()} ${currency} has been sent to your Mobile Money number.`
+      : `The dispute on your order has been reviewed. The refund was issued to the buyer.`;
+
+  const buyerMsg =
+    decision === "buyer"
+      ? `The dispute on your order has been resolved in your favour. ${amountDisbursed.toLocaleString()} ${currency} has been refunded to your Mobile Money number.`
+      : `The dispute on your order has been reviewed. The funds were released to the seller.`;
+
+  await Promise.allSettled([
+    db.query(
+      `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
+       VALUES ($1, 'Dispute resolved', $2, 'payment', $3, 'order')`,
+      [order.seller_id, sellerMsg, order.id],
+    ),
+    db.query(
+      `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
+       VALUES ($1, 'Dispute resolved', $2, 'payment', $3, 'order')`,
+      [order.buyer_id, buyerMsg, order.id],
+    ),
+  ]);
+
+  // ── Push notifications ────────────────────────────────────────────────────
+  const sellerPush = buildNotificationPayload({
+    type: "payment",
+    title: decision === "seller" ? "Dispute resolved in your favour" : "Dispute outcome",
+    body: decision === "seller"
+      ? `${amountDisbursed.toLocaleString()} ${currency} has been sent to your Mobile Money.`
+      : "Fonlok reviewed the dispute and issued a refund to the buyer.",
+    relatedId: String(order.id),
+    relatedType: "order",
+  });
+  const buyerPush = buildNotificationPayload({
+    type: "payment",
+    title: decision === "buyer" ? "Refund processed" : "Dispute outcome",
+    body: decision === "buyer"
+      ? `${amountDisbursed.toLocaleString()} ${currency} has been refunded to your Mobile Money.`
+      : "Fonlok reviewed the dispute and released the funds to the seller.",
+    relatedId: String(order.id),
+    relatedType: "order",
+  });
+
+  await Promise.allSettled([
+    sendPushToUser(order.seller_id, sellerPush),
+    sendPushToUser(order.buyer_id, buyerPush),
+  ]);
+
+  // ── Emails ────────────────────────────────────────────────────────────────
+  sendDisputeResolvedSeller(
+    seller, listing, displayId, invoiceId, decision, amountDisbursed, currency,
+  ).catch((e) =>
+    console.error("[email] dispute_resolved seller:", e.message),
+  );
+  sendDisputeResolvedBuyer(
+    buyer, listing, displayId, invoiceId, decision, amountDisbursed, currency,
+  ).catch((e) =>
+    console.error("[email] dispute_resolved buyer:", e.message),
+  );
 }
 
 // ─── payment.initiated ────────────────────────────────────────────────────────

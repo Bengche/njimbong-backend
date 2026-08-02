@@ -194,7 +194,9 @@ const wrap = (title, body) => `<!DOCTYPE html>
 async function send({ to, subject, html }) {
   if (!process.env.SENDGRID_API_KEY) return;
   if (!to) {
-    console.warn(`[Email] Skipping "${subject}" — recipient address is missing.`);
+    console.warn(
+      `[Email] Skipping "${subject}" — recipient address is missing.`,
+    );
     return;
   }
   const msg = {
@@ -1230,6 +1232,200 @@ export async function sendDisputeFiledToSeller(
   await send({
     to: seller.email,
     subject: `Dispute raised on your order #${orderId} — Njimbong`,
+    html,
+  });
+}
+
+// ─── 23. Dispute resolved — notify seller ────────────────────────────────────
+
+export async function sendDisputeResolvedSeller(
+  seller,
+  listing,
+  orderId,
+  fonlokInvoiceId,
+  decision,
+  amountDisbursed,
+  currency,
+) {
+  const wonDispute = decision === "seller";
+  const fmtAmount = Number(amountDisbursed).toLocaleString("en-US");
+  const html = wrap(
+    wonDispute
+      ? "Dispute Resolved in Your Favour — Njimbong"
+      : "Dispute Outcome — Njimbong",
+    `
+    <p class="greeting">
+      ${wonDispute
+        ? `${seller.name}, the dispute has been resolved in your favour.`
+        : `${seller.name}, the dispute on your order has been resolved.`}
+    </p>
+
+    <p class="text">
+      ${wonDispute
+        ? `Fonlok's support team has reviewed the dispute and determined that the funds should be released to you. <strong>${fmtAmount} ${currency}</strong> has been dispatched to your Mobile Money number.`
+        : `Fonlok's support team has reviewed the dispute and determined that a refund should be issued to the buyer. The funds held in escrow have been returned to the buyer's Mobile Money number.`}
+    </p>
+
+    <div class="${wonDispute ? "info-box" : "info-box-amber"}">
+      <div class="info-row">
+        <span class="info-label">Order Reference</span>
+        <span class="info-value">#${orderId}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Fonlok Invoice ID</span>
+        <span class="info-value" style="font-family:monospace;font-size:13px;letter-spacing:0.02em;">${fonlokInvoiceId ?? "N/A"}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Item</span>
+        <span class="info-value">${listing.title}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Decision</span>
+        <span class="info-value">
+          <span class="badge ${wonDispute ? "badge-green" : "badge-amber"}">
+            ${wonDispute ? "Resolved — funds released to seller" : "Resolved — refund issued to buyer"}
+          </span>
+        </span>
+      </div>
+      ${wonDispute ? `<div class="info-row">
+        <span class="info-label">Amount Sent</span>
+        <span class="info-value"><strong>${fmtAmount} ${currency}</strong></span>
+      </div>` : ""}
+      <div class="info-row">
+        <span class="info-label">Resolved At</span>
+        <span class="info-value">${new Date().toUTCString()}</span>
+      </div>
+    </div>
+
+    ${wonDispute ? `
+    <div class="info-box-blue">
+      <p style="margin:0;font-size:14px;color:#1e3a5f;line-height:1.7;">
+        The funds have been sent via Mobile Money. Please allow a few minutes for
+        the transfer to appear on your phone. If you do not receive the funds
+        within 24 hours, contact Fonlok at
+        <a href="mailto:support@fonlok.com" style="color:#2563eb;">support@fonlok.com</a>
+        with your <strong>Fonlok Invoice ID</strong>.
+      </p>
+    </div>` : `
+    <div class="info-box-amber">
+      <p style="margin:0;font-size:14px;color:#78350f;line-height:1.7;">
+        If you believe this decision is incorrect, contact Fonlok at
+        <a href="mailto:support@fonlok.com" style="color:#b45309;">support@fonlok.com</a>
+        and quote your <strong>Fonlok Invoice ID</strong> to request a review.
+      </p>
+    </div>`}
+
+    <hr class="divider"/>
+    <p class="meta">
+      Reference for Fonlok: <strong>Invoice ID&nbsp;${fonlokInvoiceId ?? "N/A"}</strong>
+      &nbsp;&middot;&nbsp; Njimbong Order <strong>#${orderId}</strong><br/>
+      For platform queries, contact
+      <a href="mailto:support@njimbong.com">support@njimbong.com</a>.
+    </p>
+  `,
+  );
+  await send({
+    to: seller.email,
+    subject: wonDispute
+      ? `Dispute resolved in your favour — Order #${orderId} — Njimbong`
+      : `Dispute outcome — Order #${orderId} — Njimbong`,
+    html,
+  });
+}
+
+// ─── 24. Dispute resolved — notify buyer ─────────────────────────────────────
+
+export async function sendDisputeResolvedBuyer(
+  buyer,
+  listing,
+  orderId,
+  fonlokInvoiceId,
+  decision,
+  amountDisbursed,
+  currency,
+) {
+  const wonDispute = decision === "buyer";
+  const fmtAmount = Number(amountDisbursed).toLocaleString("en-US");
+  const html = wrap(
+    wonDispute
+      ? "Refund Processed — Njimbong"
+      : "Dispute Outcome — Njimbong",
+    `
+    <p class="greeting">
+      ${wonDispute
+        ? `${buyer.name}, your refund has been processed.`
+        : `${buyer.name}, the dispute on your order has been resolved.`}
+    </p>
+
+    <p class="text">
+      ${wonDispute
+        ? `Fonlok's support team has reviewed the dispute and determined that a refund should be issued to you. <strong>${fmtAmount} ${currency}</strong> has been dispatched to your Mobile Money number.`
+        : `Fonlok's support team has reviewed the dispute and determined that the funds should be released to the seller. The escrow funds have been sent to the seller's Mobile Money number.`}
+    </p>
+
+    <div class="${wonDispute ? "info-box" : "info-box-amber"}">
+      <div class="info-row">
+        <span class="info-label">Order Reference</span>
+        <span class="info-value">#${orderId}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Fonlok Invoice ID</span>
+        <span class="info-value" style="font-family:monospace;font-size:13px;letter-spacing:0.02em;">${fonlokInvoiceId ?? "N/A"}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Item</span>
+        <span class="info-value">${listing.title}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Decision</span>
+        <span class="info-value">
+          <span class="badge ${wonDispute ? "badge-green" : "badge-amber"}">
+            ${wonDispute ? "Refund issued to buyer" : "Resolved — funds released to seller"}
+          </span>
+        </span>
+      </div>
+      ${wonDispute ? `<div class="info-row">
+        <span class="info-label">Refund Amount</span>
+        <span class="info-value"><strong>${fmtAmount} ${currency}</strong></span>
+      </div>` : ""}
+      <div class="info-row">
+        <span class="info-label">Resolved At</span>
+        <span class="info-value">${new Date().toUTCString()}</span>
+      </div>
+    </div>
+
+    ${wonDispute ? `
+    <div class="info-box-blue">
+      <p style="margin:0;font-size:14px;color:#1e3a5f;line-height:1.7;">
+        The refund has been sent via Mobile Money. Please allow a few minutes for
+        the transfer to appear on your phone. If you do not receive the refund
+        within 24 hours, contact Fonlok at
+        <a href="mailto:support@fonlok.com" style="color:#2563eb;">support@fonlok.com</a>
+        with your <strong>Fonlok Invoice ID</strong>.
+      </p>
+    </div>` : `
+    <div class="info-box-amber">
+      <p style="margin:0;font-size:14px;color:#78350f;line-height:1.7;">
+        If you believe this decision is incorrect, contact Fonlok at
+        <a href="mailto:support@fonlok.com" style="color:#b45309;">support@fonlok.com</a>
+        and quote your <strong>Fonlok Invoice ID</strong> to request a review.
+      </p>
+    </div>`}
+
+    <hr class="divider"/>
+    <p class="meta">
+      Reference for Fonlok: <strong>Invoice ID&nbsp;${fonlokInvoiceId ?? "N/A"}</strong>
+      &nbsp;&middot;&nbsp; Njimbong Order <strong>#${orderId}</strong><br/>
+      For platform queries, contact
+      <a href="mailto:support@njimbong.com">support@njimbong.com</a>.
+    </p>
+  `,
+  );
+  await send({
+    to: buyer.email,
+    subject: wonDispute
+      ? `Your refund has been processed — Order #${orderId} — Njimbong`
+      : `Dispute outcome — Order #${orderId} — Njimbong`,
     html,
   });
 }
