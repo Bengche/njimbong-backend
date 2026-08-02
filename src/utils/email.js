@@ -1006,27 +1006,34 @@ export async function sendDisputeFiledToAdmin(
   listing,
   orderId,
   description,
+  fonlokInvoiceId,
 ) {
-  const reviewLink = `${APP_URL}/admin_dashboard/moderation`;
+  const fonlokLink = `mailto:support@fonlok.com?subject=${encodeURIComponent(`Dispute — Fonlok Invoice ${fonlokInvoiceId}`)}&body=${encodeURIComponent(`Fonlok Invoice ID: ${fonlokInvoiceId}\nNjimbong Order: #${orderId}\nDispute Reason: ${description}`)}` ;
   const html = wrap(
     "Dispute Filed — Njimbong Admin",
     `
     <p class="greeting">A dispute has been filed for an active escrow order.</p>
+    <p class="text">The payment is held by <strong>Fonlok</strong>, who manages all escrow and dispute resolution. Njimbong does not have the ability to release or refund these funds — resolution must go through Fonlok support.</p>
     <div class="info-box-red">
-      <div class="info-row"><span class="info-label">Order Reference</span><span class="info-value">#${orderId}</span></div>
+      <div class="info-row"><span class="info-label">Njimbong Order</span><span class="info-value">#${orderId}</span></div>
+      <div class="info-row"><span class="info-label">Fonlok Invoice ID</span><span class="info-value" style="font-family:monospace;font-size:13px;">${fonlokInvoiceId ?? "N/A"}</span></div>
       <div class="info-row"><span class="info-label">Listing</span><span class="info-value">${listing.title}</span></div>
       <div class="info-row"><span class="info-label">Filed by</span><span class="info-value">${disputer.name} (${disputer.email})</span></div>
-      <div class="info-row"><span class="info-label">Description</span><span class="info-value">${description}</span></div>
+      <div class="info-row"><span class="info-label">Reason</span><span class="info-value">${description}</span></div>
       <div class="info-row"><span class="info-label">Filed at</span><span class="info-value">${new Date().toUTCString()}</span></div>
     </div>
+    <div class="info-box">
+      <p style="margin:0 0 10px;font-weight:600;color:#1a1a1a;">Action required</p>
+      <p style="margin:0;color:#374151;line-height:1.7;">To escalate or inquire about the resolution status, email <a href="mailto:support@fonlok.com">support@fonlok.com</a> with the <strong>Fonlok Invoice ID</strong> above. Fonlok's team will investigate and either release funds to the seller or refund the buyer.</p>
+    </div>
     <p style="text-align:center;margin:28px 0;">
-      <a href="${reviewLink}" class="btn">Review Dispute</a>
+      <a href="${fonlokLink}" class="btn">Contact Fonlok Support</a>
     </p>
   `,
   );
   await send({
     to: ADMIN_EMAIL,
-    subject: `Dispute filed — Order #${orderId} "${listing.title}" — action required`,
+    subject: `Dispute filed — Order #${orderId} "${listing.title}" — escalate to Fonlok`,
     html,
   });
 }
@@ -1057,22 +1064,37 @@ export async function sendPasswordResetEmail(user, token) {
   });
 }
 
-export async function sendDisputeConfirmation(user, listing, orderId, reason) {
+export async function sendDisputeConfirmation(
+  user,
+  listing,
+  orderId,
+  reason,
+  fonlokInvoiceId,
+) {
   const html = wrap(
     "Dispute Submitted — Njimbong",
     `
-    <p class="greeting">${user.name}, your dispute has been submitted.</p>
-    <p class="text">We have received your dispute and our team has been notified. The funds held in escrow remain <strong>frozen</strong> until the dispute is resolved. You can expect a response within 24–48 business hours.</p>
+    <p class="greeting">${user.name}, your dispute has been registered.</p>
+    <p class="text">Your dispute has been submitted to <strong>Fonlok</strong>, the escrow provider that holds the payment. Fonlok is responsible for reviewing and resolving all disputes. The funds remain <strong>frozen</strong> until a decision is reached.</p>
     <div class="info-box">
-      <div class="info-row"><span class="info-label">Order Reference</span><span class="info-value">#${orderId}</span></div>
+      <div class="info-row"><span class="info-label">Njimbong Order</span><span class="info-value">#${orderId}</span></div>
+      <div class="info-row"><span class="info-label">Fonlok Invoice ID</span><span class="info-value" style="font-family:monospace;font-size:13px;">${fonlokInvoiceId ?? "N/A"}</span></div>
       <div class="info-row"><span class="info-label">Listing</span><span class="info-value">${listing.title}</span></div>
       ${reason ? `<div class="info-row"><span class="info-label">Your Reason</span><span class="info-value">${reason}</span></div>` : ""}
       <div class="info-row"><span class="info-label">Status</span><span class="info-value"><span class="badge badge-red">Under Dispute</span></span></div>
       <div class="info-row"><span class="info-label">Filed At</span><span class="info-value">${new Date().toUTCString()}</span></div>
     </div>
-    <p class="text">Our team may reach out to you directly to gather more information. Please keep any relevant evidence (photos, messages, receipts) ready.</p>
+    <div class="info-box">
+      <p style="margin:0 0 10px;font-weight:600;color:#1a1a1a;">What happens next</p>
+      <ul style="margin:0;padding-left:20px;color:#374151;line-height:1.8;">
+        <li>Fonlok's support team will investigate the dispute.</li>
+        <li>Both you and the seller may be contacted for evidence (photos, messages, receipts).</li>
+        <li>Fonlok will decide whether to release the funds to the seller or refund you.</li>
+        <li>No further action is required from you at this stage.</li>
+      </ul>
+    </div>
     <hr class="divider"/>
-    <p class="meta">For urgent matters, contact <a href="mailto:support@njimbong.com">support@njimbong.com</a> quoting order reference <strong>#${orderId}</strong>.</p>
+    <p class="meta">To follow up directly with Fonlok, email <a href="mailto:support@fonlok.com">support@fonlok.com</a> and quote your <strong>Fonlok Invoice ID: ${fonlokInvoiceId ?? orderId}</strong>.</p>
   `,
   );
   await send({
@@ -1088,14 +1110,16 @@ export async function sendDisputeFiledToSeller(
   listing,
   orderId,
   reason,
+  fonlokInvoiceId,
 ) {
   const html = wrap(
     "Dispute Raised on Your Order — Njimbong",
     `
     <p class="greeting">${seller.name}, a dispute has been raised on one of your orders.</p>
-    <p class="text">The buyer for your listing <strong>${listing.title}</strong> has opened a dispute. The payment currently held in escrow has been <strong>frozen</strong> pending investigation by our support team.</p>
+    <p class="text">The buyer for your listing <strong>${listing.title}</strong> has opened a dispute. The payment held in escrow by <strong>Fonlok</strong> has been <strong>frozen</strong> pending investigation. Fonlok manages all escrow payments and is responsible for resolving this dispute.</p>
     <div class="info-box-red">
-      <div class="info-row"><span class="info-label">Order Reference</span><span class="info-value">#${orderId}</span></div>
+      <div class="info-row"><span class="info-label">Njimbong Order</span><span class="info-value">#${orderId}</span></div>
+      <div class="info-row"><span class="info-label">Fonlok Invoice ID</span><span class="info-value" style="font-family:monospace;font-size:13px;">${fonlokInvoiceId ?? "N/A"}</span></div>
       <div class="info-row"><span class="info-label">Listing</span><span class="info-value">${listing.title}</span></div>
       <div class="info-row"><span class="info-label">Raised by</span><span class="info-value">${buyer.name}</span></div>
       ${reason ? `<div class="info-row"><span class="info-label">Reason Given</span><span class="info-value">${reason}</span></div>` : ""}
@@ -1104,14 +1128,14 @@ export async function sendDisputeFiledToSeller(
     <div class="info-box">
       <p style="margin:0 0 10px;font-weight:600;color:#1a1a1a;">What happens next</p>
       <ul style="margin:0;padding-left:20px;color:#374151;line-height:1.8;">
-        <li>Our support team will review the dispute and may contact you for more information.</li>
-        <li>Funds remain frozen until the dispute is resolved — no action is required from you at this stage.</li>
-        <li>Please keep any evidence ready (photos, messages, delivery confirmation).</li>
-        <li>If the dispute is resolved in your favour, funds will be released to you promptly.</li>
+        <li>Fonlok's support team will review the dispute and may contact both parties for evidence.</li>
+        <li>Funds remain frozen until Fonlok reaches a decision — no action is required from you right now.</li>
+        <li>Gather any supporting evidence (photos, messages, delivery confirmation) in case Fonlok contacts you.</li>
+        <li>If the dispute is resolved in your favour, Fonlok will release the funds to your Mobile Money number.</li>
       </ul>
     </div>
     <hr class="divider"/>
-    <p class="meta">For questions, contact <a href="mailto:support@njimbong.com">support@njimbong.com</a> quoting order reference <strong>#${orderId}</strong>.</p>
+    <p class="meta">To present your case directly to Fonlok, email <a href="mailto:support@fonlok.com">support@fonlok.com</a> and quote your <strong>Fonlok Invoice ID: ${fonlokInvoiceId ?? orderId}</strong>.</p>
   `,
   );
   await send({
