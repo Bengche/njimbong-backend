@@ -46,113 +46,107 @@ const wrap = (title, body) => `<!DOCTYPE html>
     *            { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
     table, td    { border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
     img          { border: 0; display: block; height: auto; max-width: 100%; outline: none; }
-    /* Gmail blue-link override */
     u + #body a  { color: inherit; text-decoration: none; }
 
-    body { background-color: #eef0ee; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #111827; }
+    body { background-color: #f0f2f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1a1a1a; }
 
-    /* ── Header ─────────────────────────────────────────────────── */
-    .eml-header  { background: linear-gradient(135deg, #16a34a 0%, #064e3b 100%); padding: 32px 40px 28px; text-align: center; }
-    .logo-mark   { display: inline-block; width: 54px; height: 54px; background: rgba(255,255,255,0.18); border-radius: 14px; line-height: 54px; text-align: center; font-size: 28px; font-weight: 900; color: #ffffff; letter-spacing: -1px; }
-    .brand-name  { color: #ffffff; font-size: 22px; font-weight: 700; margin-top: 10px; letter-spacing: -0.5px; }
+    /* ── Header ──────────────────────────────────────────────────── */
+    .eml-header { background: linear-gradient(150deg, #18a34a 0%, #053d2c 100%); padding: 40px 52px 36px; text-align: center; }
 
-    /* ── Content ────────────────────────────────────────────────── */
-    .eml-body     { background: #ffffff; padding: 36px 40px; }
-    .greeting     { font-size: 18px; font-weight: 700; color: #111827; margin: 0 0 16px; line-height: 1.4; }
-    .text         { font-size: 15px; line-height: 1.75; color: #374151; margin: 0 0 16px; }
-    .text a       { color: #16a34a; text-decoration: underline; }
+    /* ── Body ────────────────────────────────────────────────────── */
+    .eml-body   { background: #ffffff; padding: 48px 52px 40px; }
+    .greeting   { font-size: 22px; font-weight: 800; color: #0d0d0d; margin: 0 0 18px; line-height: 1.3; letter-spacing: -0.3px; }
+    .text       { font-size: 15px; line-height: 1.85; color: #4b5563; margin: 0 0 18px; }
+    .text a     { color: #16a34a; text-decoration: underline; }
 
     /* ── Buttons ─────────────────────────────────────────────────── */
-    .btn-row      { padding: 8px 0 24px; text-align: center; }
-    .btn          { display: inline-block; background-color: #16a34a; color: #ffffff !important; text-decoration: none !important; padding: 13px 32px; border-radius: 8px; font-size: 15px; font-weight: 600; line-height: 1.2; mso-padding-alt: 0; }
-    .btn-outline  { display: inline-block; border: 1.5px solid #d1d5db; background-color: #ffffff; color: #374151 !important; text-decoration: none !important; padding: 11px 28px; border-radius: 8px; font-size: 14px; font-weight: 500; line-height: 1.2; }
-    .btn-blue     { display: inline-block; background-color: #0369a1; color: #ffffff !important; text-decoration: none !important; padding: 11px 28px; border-radius: 8px; font-size: 14px; font-weight: 600; line-height: 1.2; }
+    .btn         { display: inline-block; background-color: #16a34a; color: #ffffff !important; text-decoration: none !important; padding: 14px 36px; border-radius: 8px; font-size: 15px; font-weight: 700; line-height: 1.2; letter-spacing: -0.1px; }
+    .btn-outline { display: inline-block; border: 1.5px solid #d1d5db; background: #ffffff; color: #374151 !important; text-decoration: none !important; padding: 12px 28px; border-radius: 8px; font-size: 14px; font-weight: 500; line-height: 1.2; }
+    .btn-blue    { display: inline-block; background-color: #2563eb; color: #ffffff !important; text-decoration: none !important; padding: 12px 28px; border-radius: 8px; font-size: 14px; font-weight: 600; line-height: 1.2; }
 
-    /* ── Divider ─────────────────────────────────────────────────── */
-    .divider      { border: none; border-top: 1px solid #e5e7eb; margin: 24px 0; }
+    /* ── Divider ──────────────────────────────────────────────────── */
+    .divider { border: none; border-top: 1px solid #f0f0f0; margin: 28px 0; }
 
     /* ── Meta / footnote ─────────────────────────────────────────── */
-    .meta         { font-size: 13px; color: #9ca3af; line-height: 1.75; margin: 0; }
-    .meta a       { color: #6b7280; text-decoration: underline; }
+    .meta   { font-size: 13px; color: #9ca3af; line-height: 1.8; margin: 0; }
+    .meta a { color: #6b7280; text-decoration: underline; }
 
     /* ── Badges ──────────────────────────────────────────────────── */
-    .badge        { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; }
-    .badge-green  { background: #dcfce7; color: #15803d; }
-    .badge-red    { background: #fee2e2; color: #b91c1c; }
-    .badge-amber  { background: #fef3c7; color: #92400e; }
-    .badge-blue   { background: #dbeafe; color: #1d4ed8; }
+    .badge       { display: inline-block; padding: 2px 9px; border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; }
+    .badge-green { background: #dcfce7; color: #15803d; }
+    .badge-red   { background: #fee2e2; color: #b91c1c; }
+    .badge-amber { background: #fef3c7; color: #92400e; }
+    .badge-blue  { background: #dbeafe; color: #1d4ed8; }
 
-    /* ── Info boxes ──────────────────────────────────────────────── */
-    .info-box       { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 20px; margin: 20px 0; }
-    .info-box-red   { background: #fff1f2; border: 1px solid #fecdd3; border-radius: 10px; padding: 20px; margin: 20px 0; }
-    .info-box-amber { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 20px; margin: 20px 0; }
-    .info-box-blue  { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 20px; margin: 20px 0; }
+    /* ── Info boxes — left-border accent strips, no nested cards ─── */
+    .info-box       { border-left: 3px solid #16a34a; background: #f9fdfb; padding: 20px 24px; margin: 24px 0; }
+    .info-box-red   { border-left: 3px solid #ef4444; background: #fff9f9; padding: 20px 24px; margin: 24px 0; }
+    .info-box-amber { border-left: 3px solid #f59e0b; background: #fffdf5; padding: 20px 24px; margin: 24px 0; }
+    .info-box-blue  { border-left: 3px solid #2563eb; background: #f5f8ff; padding: 20px 24px; margin: 24px 0; }
 
-    /* ── Info rows — inline-block, email-safe (no flex) ─────────── */
-    .info-row         { font-size: 14px; padding: 7px 0; border-bottom: 1px solid rgba(0,0,0,0.05); overflow: hidden; }
+    /* ── Info rows ───────────────────────────────────────────────── */
+    .info-row            { font-size: 14px; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.05); overflow: hidden; }
     .info-row:last-child { border-bottom: none; padding-bottom: 0; }
-    .info-label       { display: inline-block; width: 128px; vertical-align: top; padding-right: 8px; color: #6b7280; font-size: 13px; font-weight: 400; }
-    .info-value       { display: inline-block; vertical-align: top; color: #111827; font-weight: 600; word-break: break-word; max-width: calc(100% - 136px); }
+    .info-label          { display: inline-block; width: 140px; vertical-align: top; padding-right: 12px; color: #6b7280; font-size: 13px; font-weight: 400; }
+    .info-value          { display: inline-block; vertical-align: top; color: #111827; font-weight: 600; word-break: break-word; max-width: calc(100% - 152px); }
 
     /* ── Footer ──────────────────────────────────────────────────── */
-    .eml-footer   { background: #f9fafb; border-top: 1px solid #e5e7eb; padding: 22px 40px; text-align: center; }
-    .footer-text  { font-size: 12px; color: #9ca3af; line-height: 1.8; margin: 0; }
+    .eml-footer  { background: #f8f9f8; border-top: 1px solid #eaeceb; padding: 28px 52px; text-align: center; }
+    .footer-text { font-size: 12px; color: #9ca3af; line-height: 1.9; margin: 0; }
     .footer-text a { color: #9ca3af; text-decoration: underline; }
 
     /* ── Mobile ──────────────────────────────────────────────────── */
-    @media only screen and (max-width: 620px) {
-      .eml-header    { padding: 24px 20px 20px !important; }
-      .eml-body      { padding: 24px 20px !important; }
-      .eml-footer    { padding: 18px 20px !important; }
-      .greeting      { font-size: 16px !important; }
-      .text          { font-size: 14px !important; }
-      .info-box,
-      .info-box-red,
-      .info-box-amber,
-      .info-box-blue { padding: 14px 14px !important; }
-      .info-label    { width: 108px !important; }
-      .info-value    { max-width: calc(100% - 116px) !important; }
-      .btn           { display: block !important; text-align: center !important; width: auto !important; }
+    @media only screen and (max-width: 640px) {
+      .eml-header { padding: 28px 24px 24px !important; }
+      .eml-body   { padding: 32px 24px !important; }
+      .eml-footer { padding: 22px 24px !important; }
+      .greeting   { font-size: 19px !important; }
+      .text       { font-size: 14px !important; }
+      .info-box, .info-box-red, .info-box-amber, .info-box-blue { padding: 16px 16px !important; }
+      .info-label { width: 110px !important; }
+      .info-value { max-width: calc(100% - 122px) !important; }
+      .btn        { display: block !important; text-align: center !important; width: auto !important; }
     }
     @media only screen and (max-width: 400px) {
-      .info-label  { display: block !important; width: 100% !important; max-width: 100% !important; padding-right: 0 !important; padding-bottom: 2px !important; }
-      .info-value  { display: block !important; max-width: 100% !important; }
+      .info-label { display: block !important; width: 100% !important; max-width: 100% !important; padding-right: 0 !important; padding-bottom: 2px !important; }
+      .info-value { display: block !important; max-width: 100% !important; }
     }
   </style>
 </head>
-<!-- id="body" allows Gmail's blue-link u+ selector above to target the body -->
-<body id="body" style="margin:0;padding:0;background-color:#eef0ee;">
-<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#eef0ee;width:100%;">
+<body id="body" style="margin:0;padding:0;background-color:#f0f2f0;">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f0f2f0;width:100%;">
   <tr>
-    <td align="center" style="padding:32px 16px 48px;">
+    <td align="center" style="padding:28px 12px 48px;">
 
       <!--[if mso]>
-      <table width="600" cellpadding="0" cellspacing="0"><tr><td>
+      <table width="640" cellpadding="0" cellspacing="0"><tr><td>
       <![endif]-->
 
       <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
-             style="max-width:600px;width:100%;border-radius:14px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);background:#ffffff;">
+             style="max-width:640px;width:100%;border-radius:14px;overflow:hidden;background:#ffffff;">
 
         <!-- Header -->
         <tr>
-          <td class="eml-header" style="background:linear-gradient(135deg,#16a34a 0%,#064e3b 100%);padding:32px 40px 28px;text-align:center;">
-            <div class="logo-mark" style="display:inline-block;width:54px;height:54px;background:rgba(255,255,255,0.18);border-radius:14px;line-height:54px;text-align:center;font-size:28px;font-weight:900;color:#ffffff;">N</div>
-            <div class="brand-name" style="color:#ffffff;font-size:22px;font-weight:700;margin-top:10px;letter-spacing:-0.5px;">Njimbong</div>
+          <td class="eml-header" style="background:linear-gradient(150deg,#18a34a 0%,#053d2c 100%);padding:40px 52px 36px;text-align:center;">
+            <img src="${BRAND_LOGO_URL}" alt="Njimbong" width="56" height="56"
+                 style="display:block;margin:0 auto 16px;border-radius:14px;border:2px solid rgba(255,255,255,0.2);" />
+            <div style="color:#ffffff;font-size:28px;font-weight:800;letter-spacing:-0.5px;line-height:1;">Njimbong</div>
+            <div style="color:rgba(255,255,255,0.5);font-size:10px;letter-spacing:0.18em;text-transform:uppercase;margin-top:6px;">The Trusted Marketplace &middot; Cameroon</div>
           </td>
         </tr>
 
         <!-- Body -->
         <tr>
-          <td class="eml-body" style="background:#ffffff;padding:36px 40px;">
+          <td class="eml-body" style="background:#ffffff;padding:48px 52px 40px;">
             ${body}
           </td>
         </tr>
 
         <!-- Footer -->
         <tr>
-          <td class="eml-footer" style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:22px 40px;text-align:center;">
-            <p class="footer-text" style="font-size:12px;color:#9ca3af;line-height:1.8;margin:0;">
-              This email was sent by <strong style="color:#6b7280;">Njimbong Marketplace</strong> &mdash; The Trusted Marketplace in Cameroon.<br/>
+          <td class="eml-footer" style="background:#f8f9f8;border-top:1px solid #eaeceb;padding:28px 52px;text-align:center;">
+            <p class="footer-text" style="font-size:12px;color:#9ca3af;line-height:1.9;margin:0;">
+              Sent by <strong style="color:#6b7280;">Njimbong Marketplace</strong> &mdash; The Trusted Marketplace in Cameroon<br/>
               <a href="${APP_URL}" style="color:#9ca3af;text-decoration:underline;">njimbong.com</a>
               &nbsp;&middot;&nbsp;
               <a href="mailto:support@njimbong.com" style="color:#9ca3af;text-decoration:underline;">support@njimbong.com</a>
@@ -625,10 +619,10 @@ export async function sendPaymentReleasedSeller(
 
     <p class="text">Please check your Mobile Money balance to confirm receipt of <strong>${fmtNet} ${currency}</strong>. If you do not see it within 24 hours, contact <a href="mailto:support@fonlok.com" style="color:#16a34a;">support@fonlok.com</a> with your order reference.</p>
 
-    <div class="info-box-blue" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:20px;margin:20px 0;">
-      <p style="font-size:14px;font-weight:700;color:#0369a1;margin:0 0 8px;">Leave a Review for Your Buyer</p>
+    <div class="info-box-blue" style="border-left:3px solid #2563eb;background:#f5f8ff;padding:20px 24px;margin:24px 0;">
+      <p style="font-size:14px;font-weight:700;color:#1d4ed8;margin:0 0 8px;">Leave a Review for Your Buyer</p>
       <p style="font-size:14px;color:#374151;line-height:1.7;margin:0 0 14px;">Help build trust on Njimbong by sharing your experience with this buyer. Reviews are visible to the entire community.</p>
-      <p style="text-align:center;margin:0;"><a href="${reviewLink}" class="btn-blue" style="display:inline-block;background-color:#0369a1;color:#ffffff !important;text-decoration:none;padding:11px 28px;border-radius:8px;font-size:14px;font-weight:600;">Leave a Review</a></p>
+      <p style="text-align:center;margin:0;"><a href="${reviewLink}" class="btn-blue" style="display:inline-block;background-color:#2563eb;color:#ffffff !important;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;">Leave a Review</a></p>
     </div>
 
     <p style="text-align:center;margin:28px 0;">
@@ -675,10 +669,10 @@ export async function sendPaymentReleasedBuyer(
       <div class="info-row"><span class="info-label">Status</span><span class="info-value"><span class="badge badge-green">Complete</span></span></div>
     </div>
 
-    <div class="info-box-blue" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:20px;margin:20px 0;">
-      <p style="font-size:14px;font-weight:700;color:#0369a1;margin:0 0 8px;">Share Your Experience</p>
+    <div class="info-box-blue" style="border-left:3px solid #2563eb;background:#f5f8ff;padding:20px 24px;margin:24px 0;">
+      <p style="font-size:14px;font-weight:700;color:#1d4ed8;margin:0 0 8px;">Share Your Experience</p>
       <p style="font-size:14px;color:#374151;line-height:1.7;margin:0 0 14px;">How was your experience with this seller? Your honest review helps other buyers make confident decisions and rewards trustworthy sellers on Njimbong.</p>
-      <p style="text-align:center;margin:0;"><a href="${reviewLink}" class="btn-blue" style="display:inline-block;background-color:#0369a1;color:#ffffff !important;text-decoration:none;padding:11px 28px;border-radius:8px;font-size:14px;font-weight:600;">Review the Seller</a></p>
+      <p style="text-align:center;margin:0;"><a href="${reviewLink}" class="btn-blue" style="display:inline-block;background-color:#2563eb;color:#ffffff !important;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;">Review the Seller</a></p>
     </div>
 
     <p style="text-align:center;margin:28px 0;">
@@ -826,10 +820,10 @@ export async function sendSavedSearchAlert(user, searchName, matches) {
     .map((l) => {
       const price = Number(l.price).toLocaleString("en-US");
       const link = `${APP_URL}/listing/${l.id}`;
-      return `<div style="border:1px solid #e4e4e7;border-radius:8px;padding:14px;margin-bottom:10px;">
-      <p style="font-size:15px;font-weight:600;color:#18181b;margin-bottom:4px;"><a href="${link}" style="color:#18181b;text-decoration:none;">${l.title}</a></p>
-      <p style="font-size:14px;color:#15803d;font-weight:700;margin-bottom:4px;">${price} ${l.currency}</p>
-      <p style="font-size:13px;color:#71717a;">${l.city}, ${l.country}</p>
+      return `<div style="border-bottom:1px solid #f0f0f0;padding:14px 0;">
+      <p style="font-size:15px;font-weight:700;color:#111827;margin:0 0 4px;"><a href="${link}" style="color:#111827;text-decoration:none;">${l.title}</a></p>
+      <p style="font-size:14px;color:#16a34a;font-weight:700;margin:0 0 3px;">${price} ${l.currency}</p>
+      <p style="font-size:13px;color:#6b7280;margin:0;">${l.city}, ${l.country}</p>
     </div>`;
     })
     .join("");
@@ -839,7 +833,7 @@ export async function sendSavedSearchAlert(user, searchName, matches) {
     <p class="greeting">New listings match your saved search, ${user.name}.</p>
     <p class="text">We found <strong>${matches.length} new listing${matches.length > 1 ? "s" : ""}</strong> matching your saved search <strong>"${searchName}"</strong>.</p>
     ${listingItems}
-    ${matches.length > 5 ? `<p style="font-size:13px;color:#71717a;text-align:center;margin-top:8px;">and ${matches.length - 5} more…</p>` : ""}
+    ${matches.length > 5 ? `<p style="font-size:13px;color:#9ca3af;text-align:center;margin-top:16px;">and ${matches.length - 5} more…</p>` : ""}
     <p style="text-align:center;margin:28px 0;">
       <a href="${marketLink}" class="btn">Browse All Listings</a>
     </p>
