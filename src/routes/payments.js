@@ -16,6 +16,9 @@ import {
   sendPaymentReleasedBuyer,
   sendPaymentConfirmedBuyer,
   sendPaymentConfirmedSeller,
+  sendDisputeConfirmation,
+  sendDisputeFiledToSeller,
+  sendDisputeFiledToAdmin,
 } from "../utils/email.js";
 import {
   buildNotificationPayload,
@@ -575,8 +578,18 @@ router.post("/payments/dispute", authMiddleware, async (req, res) => {
 
   try {
     const orderResult = await db.query(
-      `SELECT id, fonlok_invoice_id, fonlok_status, buyer_id, seller_id
-       FROM orders WHERE id = $1`,
+      `SELECT o.id, o.fonlok_invoice_id, o.fonlok_status, o.buyer_id, o.seller_id,
+              o.order_reference,
+              b.name        AS buyer_name,
+              COALESCE(o.buyer_checkout_email, b.email) AS buyer_email,
+              s.name        AS seller_name,
+              COALESCE(l.seller_email, s.email)         AS seller_email,
+              l.title       AS listing_title
+       FROM orders o
+       LEFT JOIN userlistings l ON l.id  = o.listing_id
+       LEFT JOIN users        b ON b.id  = o.buyer_id
+       LEFT JOIN users        s ON s.id  = o.seller_id
+       WHERE o.id = $1`,
       [order_id],
     );
 
@@ -602,11 +615,34 @@ router.post("/payments/dispute", authMiddleware, async (req, res) => {
       [order_id],
     );
 
-    // Notify seller
+    const displayId = order.order_reference ?? order_id;
+    const listing = { title: order.listing_title ?? "your listing" };
+    const buyer = { name: order.buyer_name, email: order.buyer_email };
+    const seller = { name: order.seller_name, email: order.seller_email };
+
+    // In-app notification — seller
     await db.query(
       `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
-       VALUES ($1, 'Dispute raised', 'A buyer has raised a dispute on your order. Funds are held pending resolution.', 'payment', $2, 'order')`,
+       VALUES ($1, 'Dispute raised on your order', 'A buyer has raised a dispute on your order. Funds are held pending resolution.', 'payment', $2, 'order')`,
       [order.seller_id, order_id],
+    );
+
+    // In-app notification — buyer
+    await db.query(
+      `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
+       VALUES ($1, 'Dispute submitted', 'Your dispute has been submitted. Funds remain frozen until the matter is resolved.', 'payment', $2, 'order')`,
+      [order.buyer_id, order_id],
+    );
+
+    // Emails — fire and forget
+    sendDisputeConfirmation(buyer, listing, displayId, reason).catch((e) =>
+      console.error("[email] dispute buyer confirmation:", e.message),
+    );
+    sendDisputeFiledToSeller(seller, buyer, listing, displayId, reason).catch(
+      (e) => console.error("[email] dispute seller notification:", e.message),
+    );
+    sendDisputeFiledToAdmin(buyer, listing, displayId, reason).catch((e) =>
+      console.error("[email] dispute admin notification:", e.message),
     );
 
     return res.json({

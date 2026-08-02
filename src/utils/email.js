@@ -24,7 +24,9 @@ try {
     .readFileSync(path.join(__dirname, "../../assets/logo.png"))
     .toString("base64");
 } catch {
-  console.warn("[Email] assets/logo.png not found — logo will not appear in emails.");
+  console.warn(
+    "[Email] assets/logo.png not found — logo will not appear in emails.",
+  );
 }
 
 const FROM = "Njimbong <support@njimbong.com>";
@@ -1055,24 +1057,66 @@ export async function sendPasswordResetEmail(user, token) {
   });
 }
 
-export async function sendDisputeConfirmation(user, listing, orderId) {
+export async function sendDisputeConfirmation(user, listing, orderId, reason) {
   const html = wrap(
     "Dispute Submitted — Njimbong",
     `
     <p class="greeting">${user.name}, your dispute has been submitted.</p>
-    <p class="text">Our team has been notified and will review your dispute within 24–48 business hours. The funds held in escrow remain frozen until the dispute is resolved.</p>
+    <p class="text">We have received your dispute and our team has been notified. The funds held in escrow remain <strong>frozen</strong> until the dispute is resolved. You can expect a response within 24–48 business hours.</p>
     <div class="info-box">
       <div class="info-row"><span class="info-label">Order Reference</span><span class="info-value">#${orderId}</span></div>
       <div class="info-row"><span class="info-label">Listing</span><span class="info-value">${listing.title}</span></div>
+      ${reason ? `<div class="info-row"><span class="info-label">Your Reason</span><span class="info-value">${reason}</span></div>` : ""}
       <div class="info-row"><span class="info-label">Status</span><span class="info-value"><span class="badge badge-red">Under Dispute</span></span></div>
+      <div class="info-row"><span class="info-label">Filed At</span><span class="info-value">${new Date().toUTCString()}</span></div>
     </div>
+    <p class="text">Our team may reach out to you directly to gather more information. Please keep any relevant evidence (photos, messages, receipts) ready.</p>
     <hr class="divider"/>
-    <p class="meta">For urgent matters, contact <a href="mailto:support@njimbong.com">support@njimbong.com</a> with your order reference <strong>#${orderId}</strong>.</p>
+    <p class="meta">For urgent matters, contact <a href="mailto:support@njimbong.com">support@njimbong.com</a> quoting order reference <strong>#${orderId}</strong>.</p>
   `,
   );
   await send({
     to: user.email,
-    subject: `Dispute submitted for order #${orderId} — Njimbong`,
+    subject: `Your dispute has been submitted — Order #${orderId}`,
+    html,
+  });
+}
+
+export async function sendDisputeFiledToSeller(
+  seller,
+  buyer,
+  listing,
+  orderId,
+  reason,
+) {
+  const html = wrap(
+    "Dispute Raised on Your Order — Njimbong",
+    `
+    <p class="greeting">${seller.name}, a dispute has been raised on one of your orders.</p>
+    <p class="text">The buyer for your listing <strong>${listing.title}</strong> has opened a dispute. The payment currently held in escrow has been <strong>frozen</strong> pending investigation by our support team.</p>
+    <div class="info-box-red">
+      <div class="info-row"><span class="info-label">Order Reference</span><span class="info-value">#${orderId}</span></div>
+      <div class="info-row"><span class="info-label">Listing</span><span class="info-value">${listing.title}</span></div>
+      <div class="info-row"><span class="info-label">Raised by</span><span class="info-value">${buyer.name}</span></div>
+      ${reason ? `<div class="info-row"><span class="info-label">Reason Given</span><span class="info-value">${reason}</span></div>` : ""}
+      <div class="info-row"><span class="info-label">Status</span><span class="info-value"><span class="badge badge-red">Under Dispute</span></span></div>
+    </div>
+    <div class="info-box">
+      <p style="margin:0 0 10px;font-weight:600;color:#1a1a1a;">What happens next</p>
+      <ul style="margin:0;padding-left:20px;color:#374151;line-height:1.8;">
+        <li>Our support team will review the dispute and may contact you for more information.</li>
+        <li>Funds remain frozen until the dispute is resolved — no action is required from you at this stage.</li>
+        <li>Please keep any evidence ready (photos, messages, delivery confirmation).</li>
+        <li>If the dispute is resolved in your favour, funds will be released to you promptly.</li>
+      </ul>
+    </div>
+    <hr class="divider"/>
+    <p class="meta">For questions, contact <a href="mailto:support@njimbong.com">support@njimbong.com</a> quoting order reference <strong>#${orderId}</strong>.</p>
+  `,
+  );
+  await send({
+    to: seller.email,
+    subject: `Dispute raised on your order #${orderId} — Njimbong`,
     html,
   });
 }
