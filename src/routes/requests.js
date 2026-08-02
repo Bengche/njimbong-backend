@@ -18,6 +18,7 @@ import {
   buildNotificationPayload,
   sendPushToUser,
 } from "../utils/pushNotifications.js";
+import { sendRequestFulfilled } from "../utils/email.js";
 
 const router = express.Router();
 
@@ -555,7 +556,7 @@ router.post(
         [requestId],
       );
 
-      // ── 5. Notify the buyer ───────────────────────────────────────────────
+      // ── 5. Notify the buyer (push + email) ──────────────────────────────
       const sellerRes = await db.query(`SELECT name FROM users WHERE id = $1`, [
         req.user.id,
       ]);
@@ -569,6 +570,20 @@ router.post(
         relatedType: "listing",
         url: `/listing/${listing.id}`,
       });
+
+      // Email notification — fire-and-forget
+      const buyerRes = await db.query(
+        `SELECT id, name, email FROM users WHERE id = $1`,
+        [buyerRequest.user_id],
+      );
+      if (buyerRes.rows.length > 0) {
+        sendRequestFulfilled(
+          buyerRes.rows[0],
+          { name: sellerName },
+          buyerRequest,
+          listing,
+        ).catch(() => {});
+      }
 
       res.status(201).json({
         message: "Listing created successfully. The buyer has been notified.",

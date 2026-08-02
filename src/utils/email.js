@@ -1042,3 +1042,53 @@ export async function sendDisputeConfirmation(user, listing, orderId) {
     html,
   });
 }
+
+// ─── Request fulfilled — notify buyer ────────────────────────────────────────
+
+export async function sendRequestFulfilled(buyer, seller, request, listing) {
+  const listingLink = `${APP_URL}/listing/${listing.id}`;
+  const fmtPrice = Number(listing.price).toLocaleString("en-US");
+  const html = wrap(
+    "A seller has your item! — Njimbong",
+    `
+    <p class="greeting">Great news, ${buyer.name}!</p>
+    <p class="text">
+      <strong>${seller.name}</strong> has accepted your request for
+      <strong>"${request.title}"</strong> and created a listing.
+      You can view it now and pay securely through Njimbong Escrow.
+    </p>
+
+    <div class="info-box">
+      <div class="info-row"><span class="info-label">Your Request</span><span class="info-value">${request.title}</span></div>
+      <div class="info-row"><span class="info-label">Seller</span><span class="info-value">${seller.name}</span></div>
+      <div class="info-row"><span class="info-label">Asking Price</span><span class="info-value">${fmtPrice} ${listing.currency}</span></div>
+      <div class="info-row"><span class="info-label">Location</span><span class="info-value">${[listing.city, listing.country].filter(Boolean).join(", ") || "See listing"}</span></div>
+      <div class="info-row"><span class="info-label">Condition</span><span class="info-value">${listing.condition || "—"}</span></div>
+    </div>
+
+    <p style="text-align:center;margin:28px 0;">
+      <a href="${listingLink}" class="btn">View Listing &amp; Buy Securely</a>
+    </p>
+
+    <div class="info-box-amber">
+      <p style="font-size:14px;font-weight:700;color:#92400e;margin-bottom:8px;">Pay safely through Escrow</p>
+      <p style="font-size:14px;color:#374151;line-height:1.8;">
+        1. Click <strong>View Listing</strong> above and review the details.<br/>
+        2. When you're ready, pay through <strong>Njimbong Escrow</strong> — your money is held safely until you confirm receipt.<br/>
+        3. Once you confirm you've received the item, the seller is paid automatically.
+      </p>
+    </div>
+
+    <hr class="divider"/>
+    <p class="meta">
+      If you did not post this request or need help, contact
+      <a href="mailto:support@njimbong.com">support@njimbong.com</a>.
+    </p>
+  `,
+  );
+  await send({
+    to: buyer.email,
+    subject: `${seller.name} has your item — "${request.title}" — Njimbong`,
+    html,
+  });
+}
