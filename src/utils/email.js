@@ -14,9 +14,11 @@ const FROM = "Njimbong <support@njimbong.com>";
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "support@njimbong.com";
 const APP_URL =
   process.env.FRONTEND_URL?.split(",")[0].trim() || "https://njimbong.com";
+// Use the same domain as APP_URL so the logo always resolves correctly.
+// The /icon-192x192.png file is in Next.js public/ and is always served at root.
 const BRAND_LOGO_URL =
   process.env.EMAIL_LOGO_URL?.trim() ||
-  "https://www.njimbong.com/icon-192x192.png";
+  `${APP_URL}/icon-192x192.png`;
 
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -128,10 +130,19 @@ const wrap = (title, body) => `<!DOCTYPE html>
         <!-- Header -->
         <tr>
           <td class="eml-header" style="background:linear-gradient(150deg,#18a34a 0%,#053d2c 100%);padding:40px 52px 36px;text-align:center;">
+            <!--[if !mso]><!-->
             <img src="${BRAND_LOGO_URL}" alt="Njimbong" width="56" height="56"
-                 style="display:block;margin:0 auto 16px;border-radius:14px;border:2px solid rgba(255,255,255,0.2);" />
-            <div style="color:#ffffff;font-size:28px;font-weight:800;letter-spacing:-0.5px;line-height:1;">Njimbong</div>
-            <div style="color:rgba(255,255,255,0.5);font-size:10px;letter-spacing:0.18em;text-transform:uppercase;margin-top:6px;">The Trusted Marketplace &middot; Cameroon</div>
+                 style="display:block;margin:0 auto 16px;border-radius:14px;border:2px solid rgba(255,255,255,0.2);width:56px;height:56px;" />
+            <!--<![endif]-->
+            <!--[if mso]>
+            <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin-bottom:16px;">
+              <tr><td align="center" style="width:56px;height:56px;background:#ffffff;border-radius:14px;">
+                <p style="margin:0;font-size:28px;font-weight:900;color:#16a34a;line-height:56px;font-family:Arial,sans-serif;">N</p>
+              </td></tr>
+            </table>
+            <![endif]-->
+            <div style="color:#ffffff;font-size:28px;font-weight:800;letter-spacing:-0.5px;line-height:1;font-family:Arial,sans-serif;">Njimbong</div>
+            <div style="color:rgba(255,255,255,0.5);font-size:10px;letter-spacing:0.18em;text-transform:uppercase;margin-top:6px;font-family:Arial,sans-serif;">The Trusted Marketplace &middot; Cameroon</div>
           </td>
         </tr>
 
