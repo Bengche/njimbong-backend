@@ -75,7 +75,7 @@ router.get("/user/:id/public-profile", async (req, res) => {
     let kycStatus = "none";
     try {
       const kycResult = await db.query(
-        `SELECT status FROM kyc_verifications WHERE user_id = $1 ORDER BY submitted_at DESC LIMIT 1`,
+        `SELECT status FROM kyc_verifications WHERE userid = $1 ORDER BY createdat DESC LIMIT 1`,
         [id],
       );
       if (kycResult.rows.length > 0) {
