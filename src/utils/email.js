@@ -17,8 +17,7 @@ const APP_URL =
 // Use the same domain as APP_URL so the logo always resolves correctly.
 // The /icon-192x192.png file is in Next.js public/ and is always served at root.
 const BRAND_LOGO_URL =
-  process.env.EMAIL_LOGO_URL?.trim() ||
-  `${APP_URL}/icon-192x192.png`;
+  process.env.EMAIL_LOGO_URL?.trim() || `${APP_URL}/icon-192x192.png`;
 
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
