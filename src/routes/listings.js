@@ -6,7 +6,6 @@ import authMiddleware from "../Middleware/authMiddleware.js";
 import optionalAuthMiddleware from "../Middleware/optionalAuthMiddleware.js";
 import { blockIfSuspended } from "../Middleware/suspensionMiddleware.js";
 import {
-  sendListingSubmittedAdmin,
   sendPriceDropAlert,
   sendNewListingFromFollowed,
 } from "../utils/email.js";
@@ -34,16 +33,18 @@ const notifyFollowersOfNewListing = async (sellerId, sellerName, listing) => {
     await Promise.all(
       followersRes.rows.map(async (follower) => {
         // 1. In-app notification (bell icon)
-        await db.query(
-          `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype, createdat)
+        await db
+          .query(
+            `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype, createdat)
            VALUES ($1, $2, $3, 'new_listing_from_followed', $4, 'listing', NOW())`,
-          [
-            follower.follower_id,
-            `${sellerName} posted a new listing`,
-            `"${listing.title}" — ${price}`,
-            listing.id,
-          ],
-        ).catch(() => {}); // never block on notification failure
+            [
+              follower.follower_id,
+              `${sellerName} posted a new listing`,
+              `"${listing.title}" — ${price}`,
+              listing.id,
+            ],
+          )
+          .catch(() => {}); // never block on notification failure
 
         // 2. Web push notification
         sendPushToUser(
@@ -283,14 +284,12 @@ router.post(
         }
       }
 
-      // Notify admin about new listing (skip for drafts)
+      // Notify followers of this seller
       const posterResult = await db.query(
         "SELECT id, name, email FROM users WHERE id = $1",
         [req.user.id],
       );
       if (posterResult.rows.length > 0 && !isDraft) {
-        sendListingSubmittedAdmin(posterResult.rows[0], listingResult.rows[0]);
-
         // Notify followers of this seller
         notifyFollowersOfNewListing(
           req.user.id,
@@ -811,12 +810,15 @@ router.put(
 
       // Notify followers that this seller's listing is back live
       const renewedListing = result.rows[0];
-      const sellerRes = await db.query(
-        "SELECT id, name FROM users WHERE id = $1",
-        [userId],
-      ).catch(() => ({ rows: [] }));
+      const sellerRes = await db
+        .query("SELECT id, name FROM users WHERE id = $1", [userId])
+        .catch(() => ({ rows: [] }));
       if (sellerRes.rows.length > 0) {
-        notifyFollowersOfNewListing(userId, sellerRes.rows[0].name, renewedListing);
+        notifyFollowersOfNewListing(
+          userId,
+          sellerRes.rows[0].name,
+          renewedListing,
+        );
       }
 
       res.status(200).json({
@@ -929,16 +931,18 @@ router.put(
         [id],
       );
 
-      // Notify admin
+      // Notify followers
       const posterResult = await db.query(
         "SELECT id, name, email FROM users WHERE id = $1",
         [userId],
       );
       if (posterResult.rows.length > 0) {
-        sendListingSubmittedAdmin(posterResult.rows[0], result.rows[0]);
-
         // Notify followers
-        notifyFollowersOfNewListing(userId, posterResult.rows[0].name, result.rows[0]);
+        notifyFollowersOfNewListing(
+          userId,
+          posterResult.rows[0].name,
+          result.rows[0],
+        );
       }
 
       res.json({
