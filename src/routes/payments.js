@@ -580,15 +580,15 @@ router.post("/payments/dispute", authMiddleware, async (req, res) => {
     const orderResult = await db.query(
       `SELECT o.id, o.fonlok_invoice_id, o.fonlok_status, o.buyer_id, o.seller_id,
               o.order_reference,
-              b.name        AS buyer_name,
+              b.name                                    AS buyer_name,
               COALESCE(o.buyer_checkout_email, b.email) AS buyer_email,
-              s.name        AS seller_name,
-              COALESCE(l.seller_email, s.email)         AS seller_email,
-              l.title       AS listing_title
+              s.name                                    AS seller_name,
+              s.email                                   AS seller_email,
+              l.title                                   AS listing_title
        FROM orders o
        LEFT JOIN userlistings l ON l.id  = o.listing_id
        LEFT JOIN users        b ON b.id  = o.buyer_id
-       LEFT JOIN users        s ON s.id  = o.seller_id
+       INNER JOIN users       s ON s.id  = o.seller_id
        WHERE o.id = $1`,
       [order_id],
     );

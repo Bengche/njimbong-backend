@@ -193,6 +193,10 @@ const wrap = (title, body) => `<!DOCTYPE html>
 
 async function send({ to, subject, html }) {
   if (!process.env.SENDGRID_API_KEY) return;
+  if (!to) {
+    console.warn(`[Email] Skipping "${subject}" — recipient address is missing.`);
+    return;
+  }
   const msg = {
     from: FROM,
     to,
