@@ -636,13 +636,32 @@ router.post("/payments/dispute", authMiddleware, async (req, res) => {
 
     // Emails — fire and forget
     const fonlokInvoiceId = order.fonlok_invoice_id;
-    sendDisputeConfirmation(buyer, listing, displayId, reason, fonlokInvoiceId).catch((e) =>
+    sendDisputeConfirmation(
+      buyer,
+      listing,
+      displayId,
+      reason,
+      fonlokInvoiceId,
+    ).catch((e) =>
       console.error("[email] dispute buyer confirmation:", e.message),
     );
-    sendDisputeFiledToSeller(seller, buyer, listing, displayId, reason, fonlokInvoiceId).catch(
-      (e) => console.error("[email] dispute seller notification:", e.message),
+    sendDisputeFiledToSeller(
+      seller,
+      buyer,
+      listing,
+      displayId,
+      reason,
+      fonlokInvoiceId,
+    ).catch((e) =>
+      console.error("[email] dispute seller notification:", e.message),
     );
-    sendDisputeFiledToAdmin(buyer, listing, displayId, reason, fonlokInvoiceId).catch((e) =>
+    sendDisputeFiledToAdmin(
+      buyer,
+      listing,
+      displayId,
+      reason,
+      fonlokInvoiceId,
+    ).catch((e) =>
       console.error("[email] dispute admin notification:", e.message),
     );
 

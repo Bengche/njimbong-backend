@@ -1008,7 +1008,7 @@ export async function sendDisputeFiledToAdmin(
   description,
   fonlokInvoiceId,
 ) {
-  const fonlokLink = `mailto:support@fonlok.com?subject=${encodeURIComponent(`Dispute — Fonlok Invoice ${fonlokInvoiceId}`)}&body=${encodeURIComponent(`Fonlok Invoice ID: ${fonlokInvoiceId}\nNjimbong Order: #${orderId}\nDispute Reason: ${description}`)}` ;
+  const fonlokLink = `mailto:support@fonlok.com?subject=${encodeURIComponent(`Dispute — Fonlok Invoice ${fonlokInvoiceId}`)}&body=${encodeURIComponent(`Fonlok Invoice ID: ${fonlokInvoiceId}\nNjimbong Order: #${orderId}\nDispute Reason: ${description}`)}`;
   const html = wrap(
     "Dispute Filed — Njimbong Admin",
     `
