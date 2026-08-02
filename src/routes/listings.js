@@ -161,9 +161,9 @@ router.post(
         : [];
 
       const isDraft = is_draft === "true" || is_draft === true;
-      const moderationStatus = isDraft ? "draft" : "pending";
+      const moderationStatus = isDraft ? "draft" : "approved";
 
-      // New listings start with 'pending' moderation status
+      // New listings go live immediately (no admin approval required)
       const listingResult = await db.query(
         `INSERT INTO userlistings 
        (userid, title, description, price, currency, categoryid, location, country, city, condition, phone, seller_email, tags, status, moderation_status, is_draft, delivery_type, delivery_notes, createdat) 
@@ -776,7 +776,7 @@ router.put(
 
       const result = await db.query(
         `UPDATE userlistings
-       SET status = 'Available', moderation_status = 'pending', createdat = NOW(), updatedat = NOW()
+       SET status = 'Available', moderation_status = 'approved', createdat = NOW(), updatedat = NOW()
        WHERE id = $1
        RETURNING *`,
         [id],
@@ -886,7 +886,7 @@ router.put(
 
       const result = await db.query(
         `UPDATE userlistings
-         SET is_draft = FALSE, moderation_status = 'pending', updatedat = NOW()
+         SET is_draft = FALSE, moderation_status = 'approved', updatedat = NOW()
          WHERE id = $1 RETURNING *`,
         [id],
       );

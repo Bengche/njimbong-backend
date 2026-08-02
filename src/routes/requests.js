@@ -349,7 +349,7 @@ router.post(
         `INSERT INTO buyer_requests
            (user_id, title, description, category_id, tags, image_url, cloudinary_id,
             currency, country, moderation_status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending')
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'approved')
          RETURNING *`,
         [
           req.user.id,
