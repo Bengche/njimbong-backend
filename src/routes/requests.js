@@ -233,9 +233,17 @@ router.get("/requests/mine", authMiddleware, async (req, res) => {
          r.id, r.title, r.description, r.category_id, c.name AS category_name,
          r.tags, r.image_url, r.budget_min, r.budget_max, r.currency,
          r.country, r.city, r.status, r.moderation_status, r.view_count, r.fulfillment_count,
-         r.created_at, r.expires_at
+         r.created_at, r.expires_at,
+         r.user_id, u.name AS username, u.profilepictureurl AS user_avatar,
+         CASE WHEN k.status = 'approved' THEN 'approved' ELSE NULL END AS user_kyc_status
        FROM buyer_requests r
        LEFT JOIN categories c ON c.id = r.category_id
+       JOIN users u ON u.id = r.user_id
+       LEFT JOIN LATERAL (
+         SELECT status FROM kyc_verifications
+         WHERE userid = u.id AND status = 'approved'
+         LIMIT 1
+       ) k ON true
        WHERE r.user_id = $1
        ORDER BY r.created_at DESC`,
       [req.user.id],
