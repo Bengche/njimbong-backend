@@ -1337,6 +1337,7 @@ router.get("/admin/disputes", authMiddleware, adminCheck, async (req, res) => {
            o.currency,
            o.fonlok_status,
            o.fonlok_invoice_id,
+           o.fonlok_payment_url,
            o.dispute_transcript,
            o.dispute_transcript_sent_at,
            o.created_at,
