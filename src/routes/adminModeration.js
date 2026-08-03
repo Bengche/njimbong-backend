@@ -1327,14 +1327,10 @@ router.get(
  * GET /api/admin/disputes
  * List all orders with fonlok_status = 'disputed', newest first.
  */
-router.get(
-  "/admin/disputes",
-  authMiddleware,
-  adminCheck,
-  async (req, res) => {
-    try {
-      const { rows } = await db.query(
-        `SELECT
+router.get("/admin/disputes", authMiddleware, adminCheck, async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT
            o.id,
            o.order_reference,
            o.amount,
@@ -1365,14 +1361,13 @@ router.get(
          ) de ON TRUE
          WHERE o.fonlok_status = 'disputed'
          ORDER BY o.updated_at DESC`,
-      );
-      res.json({ disputes: rows });
-    } catch (err) {
-      console.error("[Admin] GET disputes error:", err.message);
-      res.status(500).json({ error: "Failed to fetch disputes." });
-    }
-  },
-);
+    );
+    res.json({ disputes: rows });
+  } catch (err) {
+    console.error("[Admin] GET disputes error:", err.message);
+    res.status(500).json({ error: "Failed to fetch disputes." });
+  }
+});
 
 /**
  * POST /api/admin/orders/:id/resend-dispute-transcript
@@ -1422,7 +1417,10 @@ router.post(
         [id],
       );
 
-      res.json({ success: true, message: "Transcript sent to support@fonlok.com." });
+      res.json({
+        success: true,
+        message: "Transcript sent to support@fonlok.com.",
+      });
     } catch (err) {
       console.error("[Admin] resend-dispute-transcript error:", err.message);
       res.status(500).json({ error: "Failed to resend transcript." });

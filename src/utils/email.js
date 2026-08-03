@@ -1521,7 +1521,8 @@ export async function sendDisputeTranscriptToFonlok(
   listingTitle,
   reason,
 ) {
-  const transcript = order.dispute_transcript || "(No chat transcript recorded)";
+  const transcript =
+    order.dispute_transcript || "(No chat transcript recorded)";
   const invoiceId = order.fonlok_invoice_id || "N/A";
   const orderRef = order.order_reference || order.id;
 

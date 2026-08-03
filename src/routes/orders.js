@@ -76,7 +76,10 @@ async function fetchChatTranscript(listingId, buyerId, sellerId) {
     if (messages.length === 0) return null;
 
     const lines = messages.map((m) => {
-      const ts = new Date(m.created_at).toISOString().replace("T", " ").slice(0, 16);
+      const ts = new Date(m.created_at)
+        .toISOString()
+        .replace("T", " ")
+        .slice(0, 16);
       return `[${ts}] ${m.sender_name} (${m.role}): ${m.content}`;
     });
 
@@ -88,7 +91,11 @@ async function fetchChatTranscript(listingId, buyerId, sellerId) {
       body = body.slice(0, MAX);
       truncated = true;
     }
-    return header + body + (truncated ? "\n\n[Transcript truncated to fit size limit]" : "");
+    return (
+      header +
+      body +
+      (truncated ? "\n\n[Transcript truncated to fit size limit]" : "")
+    );
   } catch (e) {
     console.error("[Dispute] Failed to fetch chat transcript:", e.message);
     return null;
@@ -209,18 +216,14 @@ router.post(
     const { description } = req.body;
 
     if (!description || description.trim().length < 10) {
-      return res
-        .status(400)
-        .json({
-          error: "Please provide a description of the dispute (min 10 chars).",
-        });
+      return res.status(400).json({
+        error: "Please provide a description of the dispute (min 10 chars).",
+      });
     }
     if (description.trim().length > 1000) {
-      return res
-        .status(400)
-        .json({
-          error: "Dispute description must not exceed 1000 characters.",
-        });
+      return res.status(400).json({
+        error: "Dispute description must not exceed 1000 characters.",
+      });
     }
 
     try {
@@ -246,12 +249,10 @@ router.post(
           .json({ error: "You are not a party to this order." });
       }
       if (order.fonlok_status !== "paid_in_escrow") {
-        return res
-          .status(409)
-          .json({
-            error:
-              "Disputes can only be filed for orders with funds actively held in escrow.",
-          });
+        return res.status(409).json({
+          error:
+            "Disputes can only be filed for orders with funds actively held in escrow.",
+        });
       }
 
       // Upload evidence images to Cloudinary
@@ -284,12 +285,10 @@ router.post(
       // If fonlok_invoice_id is missing or Fonlok rejects the call, abort so
       // we don't end up with a locally-disputed order that Fonlok still considers paid.
       if (!order.fonlok_invoice_id) {
-        return res
-          .status(502)
-          .json({
-            error:
-              "Cannot file dispute: Fonlok invoice ID is missing for this order. Contact support.",
-          });
+        return res.status(502).json({
+          error:
+            "Cannot file dispute: Fonlok invoice ID is missing for this order. Contact support.",
+        });
       }
 
       // Fetch chat transcript to provide full context to Fonlok
@@ -310,12 +309,10 @@ router.post(
           "[Dispute] Fonlok dispute call failed:",
           fonlokErr.message,
         );
-        return res
-          .status(502)
-          .json({
-            error:
-              "Failed to register dispute with payment provider. Please try again.",
-          });
+        return res.status(502).json({
+          error:
+            "Failed to register dispute with payment provider. Please try again.",
+        });
       }
 
       // Fonlok confirmed — now mark locally and store transcript
@@ -370,12 +367,10 @@ router.post(
         order.order_reference,
       );
 
-      res
-        .status(201)
-        .json({
-          message:
-            "Dispute filed successfully. Our team will review within 24-48 hours.",
-        });
+      res.status(201).json({
+        message:
+          "Dispute filed successfully. Our team will review within 24-48 hours.",
+      });
     } catch (err) {
       console.error("[Dispute] POST error:", err.message);
       res.status(500).json({ error: "Failed to file dispute." });

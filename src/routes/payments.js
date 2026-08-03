@@ -60,7 +60,10 @@ async function fetchChatTranscript(listingId, buyerId, sellerId) {
     if (messages.length === 0) return null;
 
     const lines = messages.map((m) => {
-      const ts = new Date(m.created_at).toISOString().replace("T", " ").slice(0, 16);
+      const ts = new Date(m.created_at)
+        .toISOString()
+        .replace("T", " ")
+        .slice(0, 16);
       return `[${ts}] ${m.sender_name} (${m.role}): ${m.content}`;
     });
 
@@ -72,7 +75,11 @@ async function fetchChatTranscript(listingId, buyerId, sellerId) {
       body = body.slice(0, MAX);
       truncated = true;
     }
-    return header + body + (truncated ? "\n\n[Transcript truncated to fit size limit]" : "");
+    return (
+      header +
+      body +
+      (truncated ? "\n\n[Transcript truncated to fit size limit]" : "")
+    );
   } catch (e) {
     console.error("[Dispute] Failed to fetch chat transcript:", e.message);
     return null;
@@ -667,7 +674,11 @@ router.post("/payments/dispute", authMiddleware, async (req, res) => {
       order.seller_id,
     );
 
-    await disputeFonlokPayment(order.fonlok_invoice_id, reason, transcript || undefined);
+    await disputeFonlokPayment(
+      order.fonlok_invoice_id,
+      reason,
+      transcript || undefined,
+    );
 
     await db.query(
       `UPDATE orders
