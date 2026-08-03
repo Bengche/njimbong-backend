@@ -66,12 +66,11 @@ export async function releaseFonlokPayment(invoiceId) {
   return data; // { seller_receives, platform_fee, released_at, ... }
 }
 
-/** Flag a paid invoice as disputed. */
-export async function disputeFonlokPayment(invoiceId, reason) {
-  const { data } = await client.post("/v1/payments/dispute", {
-    invoice_id: invoiceId,
-    reason,
-  });
+/** Flag a paid invoice as disputed. Optionally include a chat transcript as context. */
+export async function disputeFonlokPayment(invoiceId, reason, context) {
+  const payload = { invoice_id: invoiceId, reason };
+  if (context) payload.context = context;
+  const { data } = await client.post("/v1/payments/dispute", payload);
   return data;
 }
 

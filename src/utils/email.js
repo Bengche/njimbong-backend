@@ -1501,3 +1501,58 @@ export async function sendRequestFulfilled(buyer, seller, request, listing) {
     html,
   });
 }
+
+// ─── Dispute transcript resend — sent to Fonlok support ──────────────────────
+
+/**
+ * Send a dispute chat transcript to support@fonlok.com.
+ * Used by the admin "Resend Transcript" action.
+ *
+ * @param {object} order - { order_reference, fonlok_invoice_id, dispute_transcript }
+ * @param {object} buyer - { name, email }
+ * @param {object} seller - { name, email }
+ * @param {string} listingTitle
+ * @param {string} reason - The dispute reason/description
+ */
+export async function sendDisputeTranscriptToFonlok(
+  order,
+  buyer,
+  seller,
+  listingTitle,
+  reason,
+) {
+  const transcript = order.dispute_transcript || "(No chat transcript recorded)";
+  const invoiceId = order.fonlok_invoice_id || "N/A";
+  const orderRef = order.order_reference || order.id;
+
+  const html = wrap(
+    "Dispute Transcript — Njimbong Order",
+    `
+    <p class="greeting">Dispute Transcript Submission</p>
+    <p class="text">
+      Njimbong Marketplace is forwarding the chat transcript between buyer and seller
+      for the following disputed order. Please use this context when reviewing the dispute.
+    </p>
+
+    <div class="info-box">
+      <div class="info-row"><span class="info-label">Fonlok Invoice</span><span class="info-value" style="font-family:monospace;font-size:14px;">${invoiceId}</span></div>
+      <div class="info-row"><span class="info-label">Order Reference</span><span class="info-value">${orderRef}</span></div>
+      <div class="info-row"><span class="info-label">Listing</span><span class="info-value">${listingTitle}</span></div>
+      <div class="info-row"><span class="info-label">Buyer</span><span class="info-value">${buyer.name} &lt;${buyer.email}&gt;</span></div>
+      <div class="info-row"><span class="info-label">Seller</span><span class="info-value">${seller.name} &lt;${seller.email}&gt;</span></div>
+    </div>
+
+    <div style="margin:24px 0 8px;font-size:13px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Dispute Reason</div>
+    <div style="background:#fef9c3;border-left:4px solid #f59e0b;padding:14px 16px;border-radius:6px;font-size:14px;color:#374151;white-space:pre-wrap;">${reason}</div>
+
+    <div style="margin:24px 0 8px;font-size:13px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:0.05em;">Chat Transcript</div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;font-family:monospace;font-size:12px;color:#374151;white-space:pre-wrap;overflow-wrap:break-word;max-height:none;">${transcript}</div>
+    `,
+  );
+
+  return send({
+    to: "support@fonlok.com",
+    subject: `Dispute Transcript — Invoice ${invoiceId} — Njimbong Order #${orderRef}`,
+    html,
+  });
+}

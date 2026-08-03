@@ -24,7 +24,7 @@ const upload = multer({
   },
 });
 
-// Ensure dispute_evidence table exists
+// Ensure dispute_evidence table exists and orders has transcript columns
 const ensureDisputeTable = async () => {
   await db.query(`
     CREATE TABLE IF NOT EXISTS dispute_evidence (
@@ -36,7 +36,64 @@ const ensureDisputeTable = async () => {
       created_at  TIMESTAMP DEFAULT NOW()
     )
   `);
+  await db.query(`
+    ALTER TABLE orders
+      ADD COLUMN IF NOT EXISTS dispute_transcript       TEXT,
+      ADD COLUMN IF NOT EXISTS dispute_transcript_sent_at TIMESTAMPTZ
+  `);
 };
+
+/**
+ * Fetch and format the chat transcript between buyer and seller for a listing.
+ * Returns a string up to ~9,800 chars, or null if no conversation found.
+ */
+async function fetchChatTranscript(listingId, buyerId, sellerId) {
+  try {
+    const { rows: convRows } = await db.query(
+      `SELECT c.id FROM conversations c
+       WHERE c.listing_id = $1
+         AND ((c.buyer_id = $2 AND c.seller_id = $3)
+           OR (c.buyer_id = $3 AND c.seller_id = $2))
+       ORDER BY c.created_at DESC LIMIT 1`,
+      [listingId, buyerId, sellerId],
+    );
+    if (convRows.length === 0) return null;
+
+    const { rows: messages } = await db.query(
+      `SELECT m.content, m.created_at, m.sender_id,
+              u.name AS sender_name,
+              CASE WHEN c.buyer_id = m.sender_id THEN 'Buyer' ELSE 'Seller' END AS role
+       FROM messages m
+       JOIN conversations c ON c.id = m.conversation_id
+       JOIN users u ON u.id = m.sender_id
+       WHERE m.conversation_id = $1
+         AND m.is_deleted = FALSE
+         AND m.message_type = 'text'
+       ORDER BY m.created_at ASC
+       LIMIT 200`,
+      [convRows[0].id],
+    );
+    if (messages.length === 0) return null;
+
+    const lines = messages.map((m) => {
+      const ts = new Date(m.created_at).toISOString().replace("T", " ").slice(0, 16);
+      return `[${ts}] ${m.sender_name} (${m.role}): ${m.content}`;
+    });
+
+    const header = `=== Njimbong Chat Transcript ===\nMessages: ${messages.length}\n================================\n\n`;
+    let body = lines.join("\n");
+    const MAX = 9800 - header.length;
+    let truncated = false;
+    if (body.length > MAX) {
+      body = body.slice(0, MAX);
+      truncated = true;
+    }
+    return header + body + (truncated ? "\n\n[Transcript truncated to fit size limit]" : "");
+  } catch (e) {
+    console.error("[Dispute] Failed to fetch chat transcript:", e.message);
+    return null;
+  }
+}
 
 // ─── GET /api/orders — order history for current user (as buyer or seller) ────
 router.get("/orders", authMiddleware, async (req, res) => {
@@ -55,6 +112,8 @@ router.get("/orders", authMiddleware, async (req, res) => {
          o.amount,
          o.currency,
          o.fonlok_status,
+         o.fonlok_payment_url,
+         o.fonlok_invoice_id,
          o.created_at,
          o.updated_at,
          o.buyer_id,
@@ -232,8 +291,20 @@ router.post(
               "Cannot file dispute: Fonlok invoice ID is missing for this order. Contact support.",
           });
       }
+
+      // Fetch chat transcript to provide full context to Fonlok
+      const transcript = await fetchChatTranscript(
+        order.listing_id,
+        order.buyer_id,
+        order.seller_id,
+      );
+
       try {
-        await disputeFonlokPayment(order.fonlok_invoice_id, description.trim());
+        await disputeFonlokPayment(
+          order.fonlok_invoice_id,
+          description.trim(),
+          transcript || undefined,
+        );
       } catch (fonlokErr) {
         console.error(
           "[Dispute] Fonlok dispute call failed:",
@@ -247,10 +318,14 @@ router.post(
           });
       }
 
-      // Fonlok confirmed — now mark locally
+      // Fonlok confirmed — now mark locally and store transcript
       await db.query(
-        `UPDATE orders SET fonlok_status='disputed', updated_at=NOW() WHERE id=$1`,
-        [id],
+        `UPDATE orders
+         SET fonlok_status = 'disputed',
+             dispute_transcript = $2,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [id, transcript || null],
       );
 
       // Determine the other party

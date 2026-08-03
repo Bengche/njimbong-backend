@@ -30,6 +30,7 @@ import {
   sendAccountSuspended,
   sendAccountReinstated,
   sendAdminWarning,
+  sendDisputeTranscriptToFonlok,
 } from "../utils/email.js";
 
 const router = express.Router();
@@ -1314,6 +1315,117 @@ router.get(
       console.error("Error fetching broadcasts:", error);
       // If table doesn't exist, return empty
       res.status(200).json({ broadcasts: [], total: 0 });
+    }
+  },
+);
+
+// =====================================================
+// DISPUTE MANAGEMENT
+// =====================================================
+
+/**
+ * GET /api/admin/disputes
+ * List all orders with fonlok_status = 'disputed', newest first.
+ */
+router.get(
+  "/admin/disputes",
+  authMiddleware,
+  adminCheck,
+  async (req, res) => {
+    try {
+      const { rows } = await db.query(
+        `SELECT
+           o.id,
+           o.order_reference,
+           o.amount,
+           o.currency,
+           o.fonlok_status,
+           o.fonlok_invoice_id,
+           o.dispute_transcript,
+           o.dispute_transcript_sent_at,
+           o.created_at,
+           o.updated_at,
+           l.title  AS listing_title,
+           b.name   AS buyer_name,
+           b.email  AS buyer_email,
+           s.name   AS seller_name,
+           s.email  AS seller_email,
+           de.description AS dispute_reason,
+           de.image_urls  AS evidence_images
+         FROM orders o
+         LEFT JOIN userlistings l ON l.id = o.listing_id
+         LEFT JOIN users b ON b.id = o.buyer_id
+         LEFT JOIN users s ON s.id = o.seller_id
+         LEFT JOIN LATERAL (
+           SELECT description, image_urls
+           FROM dispute_evidence
+           WHERE order_id = o.id
+           ORDER BY created_at ASC
+           LIMIT 1
+         ) de ON TRUE
+         WHERE o.fonlok_status = 'disputed'
+         ORDER BY o.updated_at DESC`,
+      );
+      res.json({ disputes: rows });
+    } catch (err) {
+      console.error("[Admin] GET disputes error:", err.message);
+      res.status(500).json({ error: "Failed to fetch disputes." });
+    }
+  },
+);
+
+/**
+ * POST /api/admin/orders/:id/resend-dispute-transcript
+ * Resend the stored chat transcript to support@fonlok.com.
+ */
+router.post(
+  "/admin/orders/:id/resend-dispute-transcript",
+  authMiddleware,
+  adminCheck,
+  async (req, res) => {
+    const { id } = req.params;
+    try {
+      const { rows } = await db.query(
+        `SELECT
+           o.id, o.order_reference, o.fonlok_invoice_id, o.dispute_transcript,
+           l.title AS listing_title,
+           b.name  AS buyer_name,  b.email AS buyer_email,
+           s.name  AS seller_name, s.email AS seller_email,
+           de.description AS dispute_reason
+         FROM orders o
+         LEFT JOIN userlistings l ON l.id = o.listing_id
+         LEFT JOIN users b ON b.id = o.buyer_id
+         LEFT JOIN users s ON s.id = o.seller_id
+         LEFT JOIN LATERAL (
+           SELECT description FROM dispute_evidence
+           WHERE order_id = o.id ORDER BY created_at ASC LIMIT 1
+         ) de ON TRUE
+         WHERE o.id = $1`,
+        [id],
+      );
+
+      if (rows.length === 0)
+        return res.status(404).json({ error: "Order not found." });
+
+      const order = rows[0];
+
+      await sendDisputeTranscriptToFonlok(
+        order,
+        { name: order.buyer_name, email: order.buyer_email },
+        { name: order.seller_name, email: order.seller_email },
+        order.listing_title || "Unknown listing",
+        order.dispute_reason || "(no reason recorded)",
+      );
+
+      await db.query(
+        `UPDATE orders SET dispute_transcript_sent_at = NOW() WHERE id = $1`,
+        [id],
+      );
+
+      res.json({ success: true, message: "Transcript sent to support@fonlok.com." });
+    } catch (err) {
+      console.error("[Admin] resend-dispute-transcript error:", err.message);
+      res.status(500).json({ error: "Failed to resend transcript." });
     }
   },
 );

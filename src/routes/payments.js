@@ -27,6 +27,58 @@ import {
 
 const router = express.Router();
 
+/**
+ * Fetch and format the chat transcript between buyer and seller for a listing.
+ * Returns a formatted string up to ~9,800 chars, or null if no conversation found.
+ */
+async function fetchChatTranscript(listingId, buyerId, sellerId) {
+  try {
+    const { rows: convRows } = await db.query(
+      `SELECT c.id FROM conversations c
+       WHERE c.listing_id = $1
+         AND ((c.buyer_id = $2 AND c.seller_id = $3)
+           OR (c.buyer_id = $3 AND c.seller_id = $2))
+       ORDER BY c.created_at DESC LIMIT 1`,
+      [listingId, buyerId, sellerId],
+    );
+    if (convRows.length === 0) return null;
+
+    const { rows: messages } = await db.query(
+      `SELECT m.content, m.created_at, m.sender_id,
+              u.name AS sender_name,
+              CASE WHEN c.buyer_id = m.sender_id THEN 'Buyer' ELSE 'Seller' END AS role
+       FROM messages m
+       JOIN conversations c ON c.id = m.conversation_id
+       JOIN users u ON u.id = m.sender_id
+       WHERE m.conversation_id = $1
+         AND m.is_deleted = FALSE
+         AND m.message_type = 'text'
+       ORDER BY m.created_at ASC
+       LIMIT 200`,
+      [convRows[0].id],
+    );
+    if (messages.length === 0) return null;
+
+    const lines = messages.map((m) => {
+      const ts = new Date(m.created_at).toISOString().replace("T", " ").slice(0, 16);
+      return `[${ts}] ${m.sender_name} (${m.role}): ${m.content}`;
+    });
+
+    const header = `=== Njimbong Chat Transcript ===\nMessages: ${messages.length}\n================================\n\n`;
+    let body = lines.join("\n");
+    const MAX = 9800 - header.length;
+    let truncated = false;
+    if (body.length > MAX) {
+      body = body.slice(0, MAX);
+      truncated = true;
+    }
+    return header + body + (truncated ? "\n\n[Transcript truncated to fit size limit]" : "");
+  } catch (e) {
+    console.error("[Dispute] Failed to fetch chat transcript:", e.message);
+    return null;
+  }
+}
+
 /** Normalise a raw phone string to a 12-digit Cameroonian MoMo number
  *  (237 + 9 digits) or undefined if the result is not valid. */
 function normalisePhone(raw) {
@@ -579,7 +631,7 @@ router.post("/payments/dispute", authMiddleware, async (req, res) => {
   try {
     const orderResult = await db.query(
       `SELECT o.id, o.fonlok_invoice_id, o.fonlok_status, o.buyer_id, o.seller_id,
-              o.order_reference,
+              o.listing_id, o.order_reference,
               b.name                                    AS buyer_name,
               COALESCE(o.buyer_checkout_email, b.email) AS buyer_email,
               s.name                                    AS seller_name,
@@ -608,11 +660,22 @@ router.post("/payments/dispute", authMiddleware, async (req, res) => {
         error: "Disputes can only be raised on orders with funds in escrow.",
       });
 
-    await disputeFonlokPayment(order.fonlok_invoice_id, reason);
+    // Fetch chat transcript for Fonlok context
+    const transcript = await fetchChatTranscript(
+      order.listing_id,
+      order.buyer_id,
+      order.seller_id,
+    );
+
+    await disputeFonlokPayment(order.fonlok_invoice_id, reason, transcript || undefined);
 
     await db.query(
-      `UPDATE orders SET fonlok_status = 'disputed', updated_at = NOW() WHERE id = $1`,
-      [order_id],
+      `UPDATE orders
+       SET fonlok_status = 'disputed',
+           dispute_transcript = $2,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [order_id, transcript || null],
     );
 
     const displayId = order.order_reference ?? order_id;
@@ -632,7 +695,10 @@ router.post("/payments/dispute", authMiddleware, async (req, res) => {
           `[Dispute] seller_email was missing from order row; fetched directly: ${sellerEmail}`,
         );
       } catch (e) {
-        console.error("[Dispute] fallback seller email fetch failed:", e.message);
+        console.error(
+          "[Dispute] fallback seller email fetch failed:",
+          e.message,
+        );
       }
     }
     const seller = { name: order.seller_name, email: sellerEmail };
