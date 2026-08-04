@@ -137,7 +137,11 @@ router.get("/transactions/export", authMiddleware, async (req, res) => {
         [
           new Date(r.created_at).toISOString().slice(0, 19).replace("T", " "),
           escape(r.type),
-          r.direction === "in" ? "Received" : r.direction === "pending" ? "Pending" : "Sent",
+          r.direction === "in"
+            ? "Received"
+            : r.direction === "pending"
+              ? "Pending"
+              : "Sent",
           escape(r.description),
           escape(r.counterparty),
           r.amount,

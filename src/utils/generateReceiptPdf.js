@@ -85,13 +85,17 @@ export function generateReceiptPdf({ tx, user }) {
     doc.on("end", () => resolve(Buffer.concat(buffers)));
     doc.on("error", reject);
 
-    const W = doc.page.width;  // A5 = 419.53pt
+    const W = doc.page.width; // A5 = 419.53pt
     const H = doc.page.height; // A5 = 595.28pt
 
     // ── Header strip ──────────────────────────────────────────────────────────
     doc.rect(0, 0, W, 52).fill(BRAND_GREEN);
 
-    doc.fillColor("white").font("Helvetica-Bold").fontSize(13).text("NJIMBONG", 24, 18);
+    doc
+      .fillColor("white")
+      .font("Helvetica-Bold")
+      .fontSize(13)
+      .text("NJIMBONG", 24, 18);
     doc
       .fillColor("rgba(255,255,255,0.7)")
       .font("Helvetica")
@@ -107,7 +111,11 @@ export function generateReceiptPdf({ tx, user }) {
 
     // ── Amount section ────────────────────────────────────────────────────────
     const isIn = tx.direction === "in";
-    const dirLabel = isIn ? "RECEIVED" : tx.direction === "pending" ? "PENDING" : "SENT";
+    const dirLabel = isIn
+      ? "RECEIVED"
+      : tx.direction === "pending"
+        ? "PENDING"
+        : "SENT";
     const amtColor = isIn ? POSITIVE : NEGATIVE;
 
     doc.rect(0, 52, W, 120).fill(BRAND_LIGHT);
@@ -118,7 +126,9 @@ export function generateReceiptPdf({ tx, user }) {
       .fontSize(8)
       .text(dirLabel, 0, 72, { width: W, align: "center" });
 
-    const displayAmt = (isIn ? "+ " : tx.direction === "pending" ? "" : "− ") + formatAmount(tx.amount);
+    const displayAmt =
+      (isIn ? "+ " : tx.direction === "pending" ? "" : "− ") +
+      formatAmount(tx.amount);
     doc
       .fillColor(amtColor)
       .font("Helvetica-Bold")
@@ -131,7 +141,10 @@ export function generateReceiptPdf({ tx, user }) {
     const badgeW = doc.widthOfString(sLabel, { fontSize: 8 }) + 20;
     const badgeX = (W - badgeW) / 2;
 
-    doc.roundedRect(badgeX, 142, badgeW, 18, 9).fillOpacity(0.12).fill(statusColor);
+    doc
+      .roundedRect(badgeX, 142, badgeW, 18, 9)
+      .fillOpacity(0.12)
+      .fill(statusColor);
     doc.fillOpacity(1);
     doc
       .fillColor(statusColor)
@@ -160,7 +173,11 @@ export function generateReceiptPdf({ tx, user }) {
 
     rows.forEach(([label, value], i) => {
       if (i > 0) {
-        doc.rect(labelX, y, W - labelX * 2, 0.5).fillOpacity(0.5).fill(BORDER).fillOpacity(1);
+        doc
+          .rect(labelX, y, W - labelX * 2, 0.5)
+          .fillOpacity(0.5)
+          .fill(BORDER)
+          .fillOpacity(1);
       }
 
       doc
