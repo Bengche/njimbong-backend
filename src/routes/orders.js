@@ -173,7 +173,10 @@ router.get("/orders", authMiddleware, async (req, res) => {
             o.fonlok_chat_url_buyer = buyerUrl ?? o.fonlok_chat_url_buyer;
             o.fonlok_chat_url_seller = sellerUrl ?? o.fonlok_chat_url_seller;
           } catch (e) {
-            console.error(`[Orders] chat backfill failed for invoice ${o.fonlok_invoice_id}:`, e.message);
+            console.error(
+              `[Orders] chat backfill failed for invoice ${o.fonlok_invoice_id}:`,
+              e.message,
+            );
           }
         }),
       );
