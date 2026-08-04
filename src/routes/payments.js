@@ -86,6 +86,40 @@ async function fetchChatTranscript(listingId, buyerId, sellerId) {
   }
 }
 
+/** Returns raw message rows (for PDF generation) or empty array if no chat. */
+async function fetchChatMessagesRaw(listingId, buyerId, sellerId) {
+  try {
+    const { rows: convRows } = await db.query(
+      `SELECT c.id FROM conversations c
+       WHERE c.listing_id = $1
+         AND ((c.buyer_id = $2 AND c.seller_id = $3)
+           OR (c.buyer_id = $3 AND c.seller_id = $2))
+       ORDER BY c.created_at DESC LIMIT 1`,
+      [listingId, buyerId, sellerId],
+    );
+    if (convRows.length === 0) return [];
+
+    const { rows } = await db.query(
+      `SELECT m.content, m.created_at, m.sender_id,
+              u.name AS sender_name,
+              CASE WHEN c.buyer_id = m.sender_id THEN 'Buyer' ELSE 'Seller' END AS role
+       FROM messages m
+       JOIN conversations c ON c.id = m.conversation_id
+       JOIN users u ON u.id = m.sender_id
+       WHERE m.conversation_id = $1
+         AND m.is_deleted = FALSE
+         AND m.message_type = 'text'
+       ORDER BY m.created_at ASC
+       LIMIT 300`,
+      [convRows[0].id],
+    );
+    return rows;
+  } catch (e) {
+    console.error("[Dispute] Failed to fetch raw chat messages:", e.message);
+    return [];
+  }
+}
+
 /** Normalise a raw phone string to a 12-digit Cameroonian MoMo number
  *  (237 + 9 digits) or undefined if the result is not valid. */
 function normalisePhone(raw) {
@@ -718,6 +752,13 @@ router.post("/payments/dispute", authMiddleware, async (req, res) => {
     }
     const seller = { name: order.seller_name, email: sellerEmail };
 
+    // Fetch raw messages for the PDF evidence report
+    const chatMessagesRaw = await fetchChatMessagesRaw(
+      order.listing_id,
+      order.buyer_id,
+      order.seller_id,
+    );
+
     console.log(
       `[Dispute] order ${order_id} — buyer: ${buyer.email} | seller: ${seller.email} | invoice: ${order.fonlok_invoice_id}`,
     );
@@ -765,6 +806,10 @@ router.post("/payments/dispute", authMiddleware, async (req, res) => {
       displayId,
       reason,
       fonlokInvoiceId,
+      buyer,
+      seller,
+      { amount: order.amount, currency: order.currency },
+      chatMessagesRaw,
     ).catch((e) =>
       console.error("[email] dispute admin notification:", e.message),
     );

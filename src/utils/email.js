@@ -12,6 +12,7 @@ import sgMail from "@sendgrid/mail";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { generateDisputePdf } from "./generateDisputePdf.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -191,7 +192,7 @@ const wrap = (title, body) => `<!DOCTYPE html>
 
 // ─── Internal send helper ─────────────────────────────────────────────────────
 
-async function send({ to, subject, html }) {
+async function send({ to, subject, html, attachments: extraAttachments = [] }) {
   if (!process.env.SENDGRID_API_KEY) return;
   if (!to) {
     console.warn(
@@ -205,17 +206,16 @@ async function send({ to, subject, html }) {
     subject,
     html,
   };
-  if (LOGO_BASE64) {
-    msg.attachments = [
-      {
+  const logoAttachment = LOGO_BASE64
+    ? [{
         content: LOGO_BASE64,
         filename: "logo.png",
         type: "image/png",
         disposition: "inline",
         content_id: LOGO_CID,
-      },
-    ];
-  }
+      }]
+    : [];
+  msg.attachments = [...logoAttachment, ...extraAttachments];
   try {
     await sgMail.send(msg);
   } catch (err) {
@@ -1013,34 +1013,127 @@ export async function sendDisputeFiledToAdmin(
   orderId,
   description,
   fonlokInvoiceId,
+  buyer,
+  seller,
+  order,
+  chatMessages,
 ) {
-  const fonlokLink = `mailto:support@fonlok.com?subject=${encodeURIComponent(`Dispute — Fonlok Invoice ${fonlokInvoiceId}`)}&body=${encodeURIComponent(`Fonlok Invoice ID: ${fonlokInvoiceId}\nNjimbong Order: #${orderId}\nDispute Reason: ${description}`)}`;
+  const msgCount = chatMessages?.length ?? 0;
+  const transcriptSummary = msgCount > 0
+    ? `${msgCount} message${msgCount !== 1 ? "s" : ""} between ${buyer?.name ?? "buyer"} and ${seller?.name ?? "seller"} — see attached PDF`
+    : `No prior chat recorded between the two parties on this listing`;
+
   const html = wrap(
     "Dispute Filed — Njimbong Admin",
     `
-    <p class="greeting">A dispute has been filed for an active escrow order.</p>
-    <p class="text">The payment is held by <strong>Fonlok</strong>, who manages all escrow and dispute resolution. Njimbong does not have the ability to release or refund these funds — resolution must go through Fonlok support.</p>
+    <p class="greeting">A dispute has been filed on an active escrow order.</p>
+    <p class="text">
+      The payment is held by <strong>Fonlok</strong>, who manages all escrow and
+      dispute resolution. Njimbong does not have the ability to release or refund
+      these funds — resolution must go through Fonlok.
+    </p>
+
     <div class="info-box-red">
-      <div class="info-row"><span class="info-label">Njimbong Order</span><span class="info-value">#${orderId}</span></div>
-      <div class="info-row"><span class="info-label">Fonlok Invoice ID</span><span class="info-value" style="font-family:monospace;font-size:13px;">${fonlokInvoiceId ?? "N/A"}</span></div>
-      <div class="info-row"><span class="info-label">Listing</span><span class="info-value">${listing.title}</span></div>
-      <div class="info-row"><span class="info-label">Filed by</span><span class="info-value">${disputer.name} (${disputer.email})</span></div>
-      <div class="info-row"><span class="info-label">Reason</span><span class="info-value">${description}</span></div>
-      <div class="info-row"><span class="info-label">Filed at</span><span class="info-value">${new Date().toUTCString()}</span></div>
+      <div class="info-row">
+        <span class="info-label">Njimbong Order</span>
+        <span class="info-value">#${orderId}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Fonlok Invoice ID</span>
+        <span class="info-value" style="font-family:monospace;font-size:13px;">${fonlokInvoiceId ?? "N/A"}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Listing</span>
+        <span class="info-value">${listing.title}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Buyer</span>
+        <span class="info-value">${buyer?.name ?? disputer.name} &lt;${buyer?.email ?? disputer.email}&gt;</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Seller</span>
+        <span class="info-value">${seller?.name ?? "—"} &lt;${seller?.email ?? "—"}&gt;</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Dispute Reason</span>
+        <span class="info-value">${description}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Filed At</span>
+        <span class="info-value">${new Date().toUTCString()}</span>
+      </div>
     </div>
+
+    <div class="info-box">
+      <div class="info-row">
+        <span class="info-label">Chat Transcript</span>
+        <span class="info-value">${transcriptSummary}</span>
+      </div>
+    </div>
+
+    ${msgCount > 0 ? `
+    <div class="info-box-amber">
+      <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#92400e;">Evidence PDF attached</p>
+      <p style="margin:0;font-size:13px;color:#78350f;line-height:1.7;">
+        The full conversation between buyer and seller is attached to this email as a
+        PDF evidence report. It contains all ${msgCount} messages, timestamped and
+        attributed to each party, for Fonlok's review.
+      </p>
+    </div>
+    ` : `
+    <div class="info-box-amber">
+      <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#92400e;">No chat history on record</p>
+      <p style="margin:0;font-size:13px;color:#78350f;line-height:1.7;">
+        There was no prior in-app conversation between buyer and seller on this
+        listing. A confirmation PDF is attached. Resolution should proceed based on
+        the dispute reason and any evidence the parties provide directly to Fonlok.
+      </p>
+    </div>
+    `}
+
     <div class="info-box">
       <p style="margin:0 0 10px;font-weight:600;color:#1a1a1a;">Action required</p>
-      <p style="margin:0;color:#374151;line-height:1.7;">To escalate or inquire about the resolution status, email <a href="mailto:support@fonlok.com">support@fonlok.com</a> with the <strong>Fonlok Invoice ID</strong> above. Fonlok's team will investigate and either release funds to the seller or refund the buyer.</p>
+      <p style="margin:0;color:#374151;line-height:1.7;">
+        Contact <a href="mailto:support@fonlok.com">support@fonlok.com</a> with the
+        <strong>Fonlok Invoice ID</strong> above to escalate. Fonlok's team will
+        investigate and either release funds to the seller or refund the buyer.
+      </p>
     </div>
-    <p style="text-align:center;margin:28px 0;">
-      <a href="${fonlokLink}" class="btn">Contact Fonlok Support</a>
-    </p>
   `,
   );
+
+  // Generate PDF attachment
+  let pdfAttachment = null;
+  try {
+    const pdfBuffer = await generateDisputePdf({
+      order: {
+        reference:      orderId,
+        fonlokInvoiceId: fonlokInvoiceId ?? null,
+        amount:         order?.amount ?? null,
+        currency:       order?.currency ?? "XAF",
+      },
+      buyer:    { name: buyer?.name  ?? disputer.name,  email: buyer?.email  ?? disputer.email },
+      seller:   { name: seller?.name ?? "Unknown",      email: seller?.email ?? "—" },
+      listing:  { title: listing.title },
+      reason:   description,
+      messages: chatMessages ?? [],
+    });
+    const filename = `dispute-transcript-${fonlokInvoiceId ?? orderId}.pdf`;
+    pdfAttachment = {
+      content:     pdfBuffer.toString("base64"),
+      filename,
+      type:        "application/pdf",
+      disposition: "attachment",
+    };
+  } catch (pdfErr) {
+    console.error("[Email] PDF generation failed for dispute admin email:", pdfErr.message);
+  }
+
   await send({
-    to: ADMIN_EMAIL,
-    subject: `Dispute filed — Order #${orderId} "${listing.title}" — escalate to Fonlok`,
+    to:      "support@fonlok.com",
+    subject: `Dispute filed — Order #${orderId} "${listing.title}" — evidence attached`,
     html,
+    attachments: pdfAttachment ? [pdfAttachment] : [],
   });
 }
 
