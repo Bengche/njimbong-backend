@@ -207,13 +207,15 @@ async function send({ to, subject, html, attachments: extraAttachments = [] }) {
     html,
   };
   const logoAttachment = LOGO_BASE64
-    ? [{
-        content: LOGO_BASE64,
-        filename: "logo.png",
-        type: "image/png",
-        disposition: "inline",
-        content_id: LOGO_CID,
-      }]
+    ? [
+        {
+          content: LOGO_BASE64,
+          filename: "logo.png",
+          type: "image/png",
+          disposition: "inline",
+          content_id: LOGO_CID,
+        },
+      ]
     : [];
   msg.attachments = [...logoAttachment, ...extraAttachments];
   try {
@@ -1019,9 +1021,10 @@ export async function sendDisputeFiledToAdmin(
   chatMessages,
 ) {
   const msgCount = chatMessages?.length ?? 0;
-  const transcriptSummary = msgCount > 0
-    ? `${msgCount} message${msgCount !== 1 ? "s" : ""} between ${buyer?.name ?? "buyer"} and ${seller?.name ?? "seller"} — see attached PDF`
-    : `No prior chat recorded between the two parties on this listing`;
+  const transcriptSummary =
+    msgCount > 0
+      ? `${msgCount} message${msgCount !== 1 ? "s" : ""} between ${buyer?.name ?? "buyer"} and ${seller?.name ?? "seller"} — see attached PDF`
+      : `No prior chat recorded between the two parties on this listing`;
 
   const html = wrap(
     "Dispute Filed — Njimbong Admin",
@@ -1071,7 +1074,9 @@ export async function sendDisputeFiledToAdmin(
       </div>
     </div>
 
-    ${msgCount > 0 ? `
+    ${
+      msgCount > 0
+        ? `
     <div class="info-box-amber">
       <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#92400e;">Evidence PDF attached</p>
       <p style="margin:0;font-size:13px;color:#78350f;line-height:1.7;">
@@ -1080,7 +1085,8 @@ export async function sendDisputeFiledToAdmin(
         attributed to each party, for Fonlok's review.
       </p>
     </div>
-    ` : `
+    `
+        : `
     <div class="info-box-amber">
       <p style="margin:0 0 6px;font-size:14px;font-weight:700;color:#92400e;">No chat history on record</p>
       <p style="margin:0;font-size:13px;color:#78350f;line-height:1.7;">
@@ -1089,7 +1095,8 @@ export async function sendDisputeFiledToAdmin(
         the dispute reason and any evidence the parties provide directly to Fonlok.
       </p>
     </div>
-    `}
+    `
+    }
 
     <div class="info-box">
       <p style="margin:0 0 10px;font-weight:600;color:#1a1a1a;">Action required</p>
@@ -1107,30 +1114,36 @@ export async function sendDisputeFiledToAdmin(
   try {
     const pdfBuffer = await generateDisputePdf({
       order: {
-        reference:      orderId,
+        reference: orderId,
         fonlokInvoiceId: fonlokInvoiceId ?? null,
-        amount:         order?.amount ?? null,
-        currency:       order?.currency ?? "XAF",
+        amount: order?.amount ?? null,
+        currency: order?.currency ?? "XAF",
       },
-      buyer:    { name: buyer?.name  ?? disputer.name,  email: buyer?.email  ?? disputer.email },
-      seller:   { name: seller?.name ?? "Unknown",      email: seller?.email ?? "—" },
-      listing:  { title: listing.title },
-      reason:   description,
+      buyer: {
+        name: buyer?.name ?? disputer.name,
+        email: buyer?.email ?? disputer.email,
+      },
+      seller: { name: seller?.name ?? "Unknown", email: seller?.email ?? "—" },
+      listing: { title: listing.title },
+      reason: description,
       messages: chatMessages ?? [],
     });
     const filename = `dispute-transcript-${fonlokInvoiceId ?? orderId}.pdf`;
     pdfAttachment = {
-      content:     pdfBuffer.toString("base64"),
+      content: pdfBuffer.toString("base64"),
       filename,
-      type:        "application/pdf",
+      type: "application/pdf",
       disposition: "attachment",
     };
   } catch (pdfErr) {
-    console.error("[Email] PDF generation failed for dispute admin email:", pdfErr.message);
+    console.error(
+      "[Email] PDF generation failed for dispute admin email:",
+      pdfErr.message,
+    );
   }
 
   await send({
-    to:      "support@fonlok.com",
+    to: "support@fonlok.com",
     subject: `Dispute filed — Order #${orderId} "${listing.title}" — evidence attached`,
     html,
     attachments: pdfAttachment ? [pdfAttachment] : [],

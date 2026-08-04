@@ -36,6 +36,7 @@ import offers from "./routes/offers.js";
 import orders from "./routes/orders.js";
 import requests from "./routes/requests.js";
 import ai from "./routes/ai.js";
+import transactions from "./routes/transactions.js";
 import db from "./db.js";
 import {
   sendListingExpiryWarning,
@@ -181,6 +182,7 @@ app.use("/api", offers);
 app.use("/api", orders);
 app.use("/api", requests);
 app.use("/api", ai);
+app.use("/api", transactions);
 
 app.get("/", (req, res) => {
   res.status(200).json({ status: "ok" });
