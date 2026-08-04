@@ -121,6 +121,8 @@ router.get("/orders", authMiddleware, async (req, res) => {
          o.fonlok_status,
          o.fonlok_payment_url,
          o.fonlok_invoice_id,
+         o.fonlok_chat_url_buyer,
+         o.fonlok_chat_url_seller,
          o.created_at,
          o.updated_at,
          o.buyer_id,

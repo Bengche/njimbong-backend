@@ -150,7 +150,7 @@ async function handleFonlokEvent(event, eventType, invoiceId) {
       break;
 
     case "payment.disputed":
-      await handlePaymentDisputed(invoiceId);
+      await handlePaymentDisputed(event, invoiceId);
       break;
 
     case "payment.dispute_resolved":
@@ -375,16 +375,22 @@ async function handlePayoutReleased(event, invoiceId, eventType) {
 }
 
 // ─── payment.disputed ─────────────────────────────────────────────────────────
-async function handlePaymentDisputed(invoiceId) {
+async function handlePaymentDisputed(event, invoiceId) {
   const claimed = await claimEvent(invoiceId, "payment.disputed");
   if (!claimed) return;
 
+  const chatBuyerUrl = event?.chat_links?.buyer ?? null;
+  const chatSellerUrl = event?.chat_links?.seller ?? null;
+
   await db.query(
     `UPDATE orders
-     SET fonlok_status = 'disputed', updated_at = NOW()
+     SET fonlok_status          = 'disputed',
+         fonlok_chat_url_buyer  = COALESCE($2, fonlok_chat_url_buyer),
+         fonlok_chat_url_seller = COALESCE($3, fonlok_chat_url_seller),
+         updated_at             = NOW()
      WHERE fonlok_invoice_id = $1
        AND fonlok_status NOT IN ('disputed', 'released', 'cancelled')`,
-    [invoiceId],
+    [invoiceId, chatBuyerUrl, chatSellerUrl],
   );
   console.log(`[FonlokWebhook] Order disputed for invoice ${invoiceId}`);
 }

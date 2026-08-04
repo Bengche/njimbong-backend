@@ -82,6 +82,14 @@ const migrations = [
     `,
   },
   {
+    name: "003_add_fonlok_chat_urls_to_orders",
+    sql: `
+      ALTER TABLE public.orders
+        ADD COLUMN IF NOT EXISTS fonlok_chat_url_buyer  TEXT,
+        ADD COLUMN IF NOT EXISTS fonlok_chat_url_seller TEXT;
+    `,
+  },
+  {
     name: "002_create_email_verifications_table",
     sql: `
       CREATE TABLE IF NOT EXISTS public.email_verifications (

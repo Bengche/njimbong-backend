@@ -1338,6 +1338,8 @@ router.get("/admin/disputes", authMiddleware, adminCheck, async (req, res) => {
            o.fonlok_status,
            o.fonlok_invoice_id,
            o.fonlok_payment_url,
+           o.fonlok_chat_url_buyer,
+           o.fonlok_chat_url_seller,
            o.dispute_transcript,
            o.dispute_transcript_sent_at,
            o.created_at,

@@ -1076,8 +1076,18 @@ export async function sendDisputeConfirmation(
   orderId,
   reason,
   fonlokInvoiceId,
+  chatLink,
 ) {
-  const fonlokMailto = `mailto:support@fonlok.com?subject=Dispute%20follow-up%20%E2%80%94%20Invoice%20${encodeURIComponent(fonlokInvoiceId ?? orderId)}`;
+  const chatBtn = chatLink
+    ? `<p style="text-align:center;margin:28px 0;">
+        <a href="${chatLink}" class="btn">Join Dispute Chat on Fonlok</a>
+      </p>
+      <p class="text" style="text-align:center;font-size:12px;color:#6b7280;margin-top:-16px;">
+        Opens securely in Fonlok — no account required.
+      </p>`
+    : `<p style="text-align:center;margin:28px 0;">
+        <a href="mailto:support@fonlok.com?subject=Dispute%20follow-up%20%E2%80%94%20Invoice%20${encodeURIComponent(fonlokInvoiceId ?? orderId)}" class="btn">Contact Fonlok Support</a>
+      </p>`;
   const html = wrap(
     "Dispute Submitted — Njimbong",
     `
@@ -1125,14 +1135,12 @@ export async function sendDisputeConfirmation(
     </div>
 
     <p class="text" style="margin-top:24px;">
-      If you need to follow up or submit additional evidence, contact Fonlok directly
-      using the button below. Always quote your <strong>Fonlok Invoice ID</strong> so
-      their team can locate your case immediately.
+      If you need to follow up or submit additional evidence, use the button
+      below to join the shared dispute thread on Fonlok where you can
+      communicate directly with the Fonlok support team.
     </p>
 
-    <p style="text-align:center;margin:28px 0;">
-      <a href="${fonlokMailto}" class="btn">Contact Fonlok Support</a>
-    </p>
+    ${chatBtn}
 
     <hr class="divider"/>
     <p class="meta">
@@ -1157,8 +1165,18 @@ export async function sendDisputeFiledToSeller(
   orderId,
   reason,
   fonlokInvoiceId,
+  chatLink,
 ) {
-  const fonlokMailto = `mailto:support@fonlok.com?subject=Dispute%20response%20%E2%80%94%20Invoice%20${encodeURIComponent(fonlokInvoiceId ?? orderId)}`;
+  const chatBtn = chatLink
+    ? `<p style="text-align:center;margin:28px 0;">
+        <a href="${chatLink}" class="btn">Join Dispute Chat on Fonlok</a>
+      </p>
+      <p class="text" style="text-align:center;font-size:12px;color:#6b7280;margin-top:-16px;">
+        Opens securely in Fonlok — no account required.
+      </p>`
+    : `<p style="text-align:center;margin:28px 0;">
+        <a href="mailto:support@fonlok.com?subject=Dispute%20response%20%E2%80%94%20Invoice%20${encodeURIComponent(fonlokInvoiceId ?? orderId)}" class="btn">Contact Fonlok Support</a>
+      </p>`;
   const html = wrap(
     "Dispute Raised on Your Order — Njimbong",
     `
@@ -1211,14 +1229,12 @@ export async function sendDisputeFiledToSeller(
     </div>
 
     <p class="text" style="margin-top:24px;">
-      To present your case or submit evidence directly to Fonlok, use the button below.
-      Always include your <strong>Fonlok Invoice ID</strong> in your message so their
-      team can locate your case immediately.
+      To present your case or submit evidence directly to Fonlok, join the
+      shared dispute thread using the button below. You can communicate
+      directly with the Fonlok support team there.
     </p>
 
-    <p style="text-align:center;margin:28px 0;">
-      <a href="${fonlokMailto}" class="btn">Contact Fonlok Support</a>
-    </p>
+    ${chatBtn}
 
     <hr class="divider"/>
     <p class="meta">

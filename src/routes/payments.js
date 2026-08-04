@@ -674,19 +674,23 @@ router.post("/payments/dispute", authMiddleware, async (req, res) => {
       order.seller_id,
     );
 
-    await disputeFonlokPayment(
+    const disputeResult = await disputeFonlokPayment(
       order.fonlok_invoice_id,
       reason,
       transcript || undefined,
     );
+    const chatBuyerUrl = disputeResult?.chat_links?.buyer ?? null;
+    const chatSellerUrl = disputeResult?.chat_links?.seller ?? null;
 
     await db.query(
       `UPDATE orders
-       SET fonlok_status = 'disputed',
-           dispute_transcript = $2,
-           updated_at = NOW()
+       SET fonlok_status          = 'disputed',
+           dispute_transcript     = $2,
+           fonlok_chat_url_buyer  = $3,
+           fonlok_chat_url_seller = $4,
+           updated_at             = NOW()
        WHERE id = $1`,
-      [order_id, transcript || null],
+      [order_id, transcript || null, chatBuyerUrl, chatSellerUrl],
     );
 
     const displayId = order.order_reference ?? order_id;
@@ -740,6 +744,7 @@ router.post("/payments/dispute", authMiddleware, async (req, res) => {
       displayId,
       reason,
       fonlokInvoiceId,
+      chatBuyerUrl,
     ).catch((e) =>
       console.error("[email] dispute buyer confirmation:", e.message),
     );
@@ -750,6 +755,7 @@ router.post("/payments/dispute", authMiddleware, async (req, res) => {
       displayId,
       reason,
       fonlokInvoiceId,
+      chatSellerUrl,
     ).catch((e) =>
       console.error("[email] dispute seller notification:", e.message),
     );
