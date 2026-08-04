@@ -11,7 +11,7 @@ import {
   buildNotificationPayload,
   sendPushToUser,
 } from "../utils/pushNotifications.js";
-import { disputeFonlokPayment } from "../services/fonlok.js";
+import { disputeFonlokPayment, getFonlokInvoice } from "../services/fonlok.js";
 
 const router = express.Router();
 
@@ -146,7 +146,40 @@ router.get("/orders", authMiddleware, async (req, res) => {
        ORDER BY o.created_at DESC`,
       [userId],
     );
-    res.json({ orders: result.rows });
+    const rows = result.rows;
+
+    // Lazy backfill: fetch chat_links from Fonlok for disputed orders that don't have them yet
+    const needsBackfill = rows.filter(
+      (o) =>
+        o.fonlok_status === "disputed" &&
+        o.fonlok_invoice_id &&
+        (!o.fonlok_chat_url_buyer || !o.fonlok_chat_url_seller),
+    );
+    if (needsBackfill.length > 0) {
+      await Promise.allSettled(
+        needsBackfill.map(async (o) => {
+          try {
+            const invoice = await getFonlokInvoice(o.fonlok_invoice_id);
+            const buyerUrl = invoice?.chat_links?.buyer ?? null;
+            const sellerUrl = invoice?.chat_links?.seller ?? null;
+            if (!buyerUrl && !sellerUrl) return;
+            await db.query(
+              `UPDATE orders
+               SET fonlok_chat_url_buyer  = COALESCE($1, fonlok_chat_url_buyer),
+                   fonlok_chat_url_seller = COALESCE($2, fonlok_chat_url_seller)
+               WHERE id = $3`,
+              [buyerUrl, sellerUrl, o.id],
+            );
+            o.fonlok_chat_url_buyer = buyerUrl ?? o.fonlok_chat_url_buyer;
+            o.fonlok_chat_url_seller = sellerUrl ?? o.fonlok_chat_url_seller;
+          } catch (e) {
+            console.error(`[Orders] chat backfill failed for invoice ${o.fonlok_invoice_id}:`, e.message);
+          }
+        }),
+      );
+    }
+
+    res.json({ orders: rows });
   } catch (err) {
     console.error("[Orders] GET error:", err.message);
     res.status(500).json({ error: "Failed to fetch orders." });
