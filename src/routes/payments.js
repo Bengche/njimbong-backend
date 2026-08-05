@@ -301,6 +301,14 @@ router.post(
       );
       dbOrderId = orderResult.rows[0].id;
 
+      // Lock the buyer_request if this listing came from a request fulfillment
+      await client.query(
+        `UPDATE buyer_requests SET status = 'in_progress'
+         WHERE id = (SELECT request_id FROM request_fulfillments WHERE listing_id = $1 LIMIT 1)
+           AND status = 'open'`,
+        [listing_id],
+      );
+
       await client.query("COMMIT");
     } catch (txErr) {
       await client.query("ROLLBACK").catch(() => {});
@@ -371,6 +379,13 @@ router.post(
           `UPDATE orders SET fonlok_status = 'initiation_failed', updated_at = NOW() WHERE id = $1`,
           [dbOrderId],
         );
+        // Unlock the buyer_request so other sellers can still respond
+        await db.query(
+          `UPDATE buyer_requests SET status = 'open'
+           WHERE id = (SELECT request_id FROM request_fulfillments WHERE listing_id = $1 LIMIT 1)
+             AND status = 'in_progress'`,
+          [listing_id],
+        ).catch(() => {});
         const fonlokError = paymentErr.response?.data?.error;
         if (fonlokError === "no_payout_number") {
           return res.status(403).json({
@@ -407,6 +422,13 @@ router.post(
           [dbOrderId],
         )
         .catch(() => {});
+      // Unlock the buyer_request so the request becomes open again
+      await db.query(
+        `UPDATE buyer_requests SET status = 'open'
+         WHERE id = (SELECT request_id FROM request_fulfillments WHERE listing_id = $1 LIMIT 1)
+           AND status = 'in_progress'`,
+        [listing_id],
+      ).catch(() => {});
 
       console.error(
         "[Payments] initiate error:",
@@ -590,6 +612,14 @@ router.post("/payments/release", authMiddleware, async (req, res) => {
       `UPDATE userlistings SET status = 'Sold', updatedat = NOW() WHERE id = $1`,
       [order.listing_id],
     );
+
+    // Mark the originating buyer_request as fulfilled, if applicable
+    await db.query(
+      `UPDATE buyer_requests SET status = 'fulfilled'
+       WHERE id = (SELECT request_id FROM request_fulfillments WHERE listing_id = $1 LIMIT 1)
+         AND status = 'in_progress'`,
+      [order.listing_id],
+    ).catch(() => {});
 
     // ── 5. Record analytics event + upsert daily revenue for seller ──────────
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
@@ -1019,6 +1049,14 @@ router.post(
       );
       await client.query(
         `UPDATE userlistings SET status = 'In Escrow' WHERE id = $1`,
+        [listing_id],
+      );
+
+      // Lock the buyer_request if this listing came from a request fulfillment
+      await client.query(
+        `UPDATE buyer_requests SET status = 'in_progress'
+         WHERE id = (SELECT request_id FROM request_fulfillments WHERE listing_id = $1 LIMIT 1)
+           AND status = 'open'`,
         [listing_id],
       );
 

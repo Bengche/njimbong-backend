@@ -298,6 +298,14 @@ async function handlePayoutReleased(event, invoiceId, eventType) {
     order.listing_id,
   ]);
 
+  // Mark the originating buyer_request as fulfilled, if applicable
+  db.query(
+    `UPDATE buyer_requests SET status = 'fulfilled'
+     WHERE id = (SELECT request_id FROM request_fulfillments WHERE listing_id = $1 LIMIT 1)
+       AND status = 'in_progress'`,
+    [order.listing_id],
+  ).catch(() => {});
+
   // Prefer Fonlok's exact payout figures from the payload; compute from order as fallback
   const grossAmount = Number(event.gross_amount ?? order.amount);
   const platformFee = Number(
@@ -447,11 +455,25 @@ async function handleDisputeResolved(event, invoiceId) {
     await db.query(`UPDATE userlistings SET status = 'Sold' WHERE id = $1`, [
       order.listing_id,
     ]);
+    // Mark the originating buyer_request as fulfilled on seller-win dispute
+    db.query(
+      `UPDATE buyer_requests SET status = 'fulfilled'
+       WHERE id = (SELECT request_id FROM request_fulfillments WHERE listing_id = $1 LIMIT 1)
+         AND status = 'in_progress'`,
+      [order.listing_id],
+    ).catch(() => {});
   } else {
     await db.query(
       `UPDATE userlistings SET status = 'Available' WHERE id = $1`,
       [order.listing_id],
     );
+    // Unlock the buyer_request so the request becomes open again on buyer-win refund
+    db.query(
+      `UPDATE buyer_requests SET status = 'open'
+       WHERE id = (SELECT request_id FROM request_fulfillments WHERE listing_id = $1 LIMIT 1)
+         AND status = 'in_progress'`,
+      [order.listing_id],
+    ).catch(() => {});
   }
 
   // Fetch full user and listing details for notifications and emails

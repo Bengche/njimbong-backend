@@ -158,7 +158,7 @@ router.get("/requests", async (req, res) => {
     const city = req.query.city?.trim() || null;
 
     const conditions = [
-      "r.status = 'open'",
+      "r.status IN ('open', 'in_progress')",
       "r.expires_at > NOW()",
       "r.moderation_status = 'approved'",
     ];
@@ -381,7 +381,7 @@ router.delete("/requests/:id", authMiddleware, async (req, res) => {
     if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
 
     const existing = await db.query(
-      `SELECT id, user_id, cloudinary_id FROM buyer_requests WHERE id = $1`,
+      `SELECT id, user_id, cloudinary_id, status FROM buyer_requests WHERE id = $1`,
       [id],
     );
     if (!existing.rows.length)
@@ -390,6 +390,18 @@ router.delete("/requests/:id", authMiddleware, async (req, res) => {
       return res
         .status(403)
         .json({ error: "You can only delete your own requests" });
+    }
+
+    const { status } = existing.rows[0];
+    if (status === 'in_progress') {
+      return res.status(409).json({
+        error: "This request cannot be closed while a payment is in progress.",
+      });
+    }
+    if (status === 'fulfilled') {
+      return res.status(409).json({
+        error: "This request has already been fulfilled and cannot be closed.",
+      });
     }
 
     // Delete Cloudinary image if present

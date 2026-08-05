@@ -2,6 +2,7 @@ import express from "express";
 import db from "../db.js";
 import authMiddleware from "../Middleware/authMiddleware.js";
 import { generateReceiptPdf } from "../utils/generateReceiptPdf.js";
+import { generateStatementPdf } from "../utils/generateStatementPdf.js";
 
 const router = express.Router();
 
@@ -162,6 +163,48 @@ router.get("/transactions/export", authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("[Transactions] export error:", err.message);
     res.status(500).json({ error: "Failed to export transactions." });
+  }
+});
+
+// ─── GET /api/transactions/export/pdf ────────────────────────────────────────
+// Returns a professional A4 PDF account statement, optionally filtered by date.
+router.get("/transactions/export/pdf", authMiddleware, async (req, res) => {
+  const { from, to } = req.query;
+  try {
+    let rows = await fetchTransactions(req.user.id);
+
+    if (from) {
+      const fromDate = new Date(from);
+      rows = rows.filter((r) => new Date(r.created_at) >= fromDate);
+    }
+    if (to) {
+      const toDate = new Date(to);
+      toDate.setHours(23, 59, 59, 999);
+      rows = rows.filter((r) => new Date(r.created_at) <= toDate);
+    }
+
+    const { rows: userRows } = await db.query(
+      `SELECT name, email FROM users WHERE id = $1`,
+      [req.user.id],
+    );
+    const user = userRows[0] ?? { name: "Account holder", email: "" };
+
+    const pdfBuffer = await generateStatementPdf({
+      transactions: rows,
+      user,
+      from: from || null,
+      to: to || null,
+    });
+
+    const date = new Date().toISOString().slice(0, 10);
+    const filename = `njimbong-statement-${date}.pdf`;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error("[Transactions] PDF export error:", err.message);
+    res.status(500).json({ error: "Failed to generate statement." });
   }
 });
 
