@@ -380,12 +380,14 @@ router.post(
           [dbOrderId],
         );
         // Unlock the buyer_request so other sellers can still respond
-        await db.query(
-          `UPDATE buyer_requests SET status = 'open'
+        await db
+          .query(
+            `UPDATE buyer_requests SET status = 'open'
            WHERE id = (SELECT request_id FROM request_fulfillments WHERE listing_id = $1 LIMIT 1)
              AND status = 'in_progress'`,
-          [listing_id],
-        ).catch(() => {});
+            [listing_id],
+          )
+          .catch(() => {});
         const fonlokError = paymentErr.response?.data?.error;
         if (fonlokError === "no_payout_number") {
           return res.status(403).json({
@@ -423,12 +425,14 @@ router.post(
         )
         .catch(() => {});
       // Unlock the buyer_request so the request becomes open again
-      await db.query(
-        `UPDATE buyer_requests SET status = 'open'
+      await db
+        .query(
+          `UPDATE buyer_requests SET status = 'open'
          WHERE id = (SELECT request_id FROM request_fulfillments WHERE listing_id = $1 LIMIT 1)
            AND status = 'in_progress'`,
-        [listing_id],
-      ).catch(() => {});
+          [listing_id],
+        )
+        .catch(() => {});
 
       console.error(
         "[Payments] initiate error:",
@@ -614,12 +618,14 @@ router.post("/payments/release", authMiddleware, async (req, res) => {
     );
 
     // Mark the originating buyer_request as fulfilled, if applicable
-    await db.query(
-      `UPDATE buyer_requests SET status = 'fulfilled'
+    await db
+      .query(
+        `UPDATE buyer_requests SET status = 'fulfilled'
        WHERE id = (SELECT request_id FROM request_fulfillments WHERE listing_id = $1 LIMIT 1)
          AND status = 'in_progress'`,
-      [order.listing_id],
-    ).catch(() => {});
+        [order.listing_id],
+      )
+      .catch(() => {});
 
     // ── 5. Record analytics event + upsert daily revenue for seller ──────────
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD

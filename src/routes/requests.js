@@ -393,12 +393,12 @@ router.delete("/requests/:id", authMiddleware, async (req, res) => {
     }
 
     const { status } = existing.rows[0];
-    if (status === 'in_progress') {
+    if (status === "in_progress") {
       return res.status(409).json({
         error: "This request cannot be closed while a payment is in progress.",
       });
     }
-    if (status === 'fulfilled') {
+    if (status === "fulfilled") {
       return res.status(409).json({
         error: "This request has already been fulfilled and cannot be closed.",
       });
