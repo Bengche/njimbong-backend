@@ -7,7 +7,7 @@ const DARK = "#111827";
 const MUTED = "#6b7280";
 const BORDER = "#e5e7eb";
 const POSITIVE = "#15803d";
-const NEGATIVE = "#111827";
+const NEGATIVE = "#dc2626";
 const STATUS_COLORS = {
   completed: "#16a34a",
   released: "#16a34a",
@@ -49,7 +49,19 @@ function typeLabel(type) {
 }
 
 function formatAmount(amount) {
-  return Number(amount).toLocaleString("fr-CM") + " XAF";
+  return (
+    Math.round(Math.abs(Number(amount)))
+      .toString()
+      .replace(/\B(?=(\d{3})+(?!\d))/g, ",") + " XAF"
+  );
+}
+
+function truncate(doc, text, maxWidth) {
+  if (doc.widthOfString(text) <= maxWidth) return text;
+  let t = text;
+  while (t.length > 1 && doc.widthOfString(t + "...") > maxWidth)
+    t = t.slice(0, -1);
+  return t + "...";
 }
 
 function formatDate(d) {
@@ -127,7 +139,7 @@ export function generateReceiptPdf({ tx, user }) {
       .text(dirLabel, 0, 72, { width: W, align: "center" });
 
     const displayAmt =
-      (isIn ? "+ " : tx.direction === "pending" ? "" : "− ") +
+      (isIn ? "+ " : tx.direction === "pending" ? "" : "- ") +
       formatAmount(tx.amount);
     doc
       .fillColor(amtColor)
@@ -186,16 +198,14 @@ export function generateReceiptPdf({ tx, user }) {
         .fontSize(8)
         .text(label, labelX, y + 8, { width: W / 2 - 30 });
 
-      doc
-        .fillColor(DARK)
-        .font("Helvetica")
-        .fontSize(8.5)
-        .text(String(value), valueX, y + 8, {
-          width: W / 2 - labelX,
-          align: "right",
-          lineBreak: false,
-          ellipsis: true,
-        });
+      const valMaxW = W / 2 - labelX;
+      doc.font("Helvetica").fontSize(8.5);
+      const valText = truncate(doc, String(value), valMaxW);
+      doc.fillColor(DARK).text(valText, valueX, y + 8, {
+        width: valMaxW,
+        align: "right",
+        lineBreak: false,
+      });
 
       y += rowH;
     });
