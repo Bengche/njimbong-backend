@@ -84,7 +84,10 @@ router.post("/offers", authMiddleware, blockIfSuspended, async (req, res) => {
     if (existing.rows.length > 0) {
       return res
         .status(409)
-        .json({ error: "You already have an active offer on this listing. Withdraw or wait for a response before making another." });
+        .json({
+          error:
+            "You already have an active offer on this listing. Withdraw or wait for a response before making another.",
+        });
     }
 
     const offerRes = await db.query(
