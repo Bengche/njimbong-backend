@@ -119,20 +119,23 @@ const getReviewerKycStatus = async (userId) => {
     return { exists: false, kycStatus: "unknown" };
   }
 
+  // Check users.kyc_status first — but only trust it when explicitly set (not NULL)
   const columns = await getUserColumns();
   if (columns.has("kyc_status")) {
     const reviewer = await pool.query(
       "SELECT kyc_status FROM users WHERE id = $1",
       [userId],
     );
-    return {
-      exists: true,
-      kycStatus: reviewer.rows[0]?.kyc_status || "pending",
-    };
+    const status = reviewer.rows[0]?.kyc_status;
+    if (status) {
+      return { exists: true, kycStatus: status };
+    }
+    // NULL means the column was never populated for this user — fall through
   }
 
+  // Authoritative fallback: check kyc_verifications directly
   if (!(await tableExists("kyc_verifications"))) {
-    return { exists: true, kycStatus: "pending" };
+    return { exists: true, kycStatus: "not_submitted" };
   }
 
   const kycColumns = await getTableColumns("kyc_verifications");
@@ -156,7 +159,7 @@ const getReviewerKycStatus = async (userId) => {
 
   return {
     exists: true,
-    kycStatus: kycResult.rows[0]?.status || "pending",
+    kycStatus: kycResult.rows[0]?.status || "not_submitted",
   };
 };
 
