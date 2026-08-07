@@ -934,7 +934,17 @@ router.post(
         });
       }
 
-      const agreedAmount = Math.round(Number(listing.price));
+      // Use the accepted offer amount if the buyer negotiated a price
+      const offerResWallet = await client.query(
+        `SELECT amount FROM offers
+         WHERE listing_id = $1 AND buyer_id = $2 AND status = 'accepted'
+         ORDER BY updated_at DESC LIMIT 1`,
+        [listing_id, buyer_id],
+      );
+      const agreedAmount =
+        offerResWallet.rows.length > 0
+          ? Math.round(Number(offerResWallet.rows[0].amount))
+          : Math.round(Number(listing.price));
 
       // Verify the buyer has sufficient wallet balance before creating the invoice
       let walletBalance = 0;
