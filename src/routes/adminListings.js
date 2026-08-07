@@ -833,15 +833,18 @@ router.delete(
       }
 
       const listing = listingResult.rows[0];
+      const force = req.query.force === "true";
 
-      // Block deletion if the listing has funds actively held in escrow
+      // Block deletion if funds are actively in escrow — unless admin force-deletes
       const escrowCheck = await db.query(
         `SELECT id FROM orders WHERE listing_id = $1 AND fonlok_status IN ('pending', 'paid_in_escrow') LIMIT 1`,
         [id],
       );
-      if (escrowCheck.rows.length > 0) {
+      if (escrowCheck.rows.length > 0 && !force) {
         return res.status(409).json({
-          error: "Cannot delete a listing that has funds currently held in escrow. Resolve the active order first.",
+          error:
+            "Cannot delete a listing that has funds currently held in escrow. Resolve the active order first.",
+          hasEscrowOrders: true,
         });
       }
 
