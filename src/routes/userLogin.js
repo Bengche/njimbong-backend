@@ -10,6 +10,7 @@ const router = express.Router();
 
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
+  const trimmedEmail = (email || "").trim();
 
   if (!email || !password) {
     return res.status(400).json({ message: "Email and password required" });
@@ -19,7 +20,7 @@ router.post("/login", async (req, res) => {
     // Use await directly, no callback
     const result = await db.query(
       "SELECT * FROM users WHERE LOWER(email) = LOWER($1) OR username = $2",
-      [email, email],
+      [trimmedEmail, trimmedEmail],
     );
 
     if (result.rows.length === 0) {
