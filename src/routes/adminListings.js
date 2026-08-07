@@ -834,9 +834,27 @@ router.delete(
 
       const listing = listingResult.rows[0];
 
-      // Remove images then the listing
+      // Block deletion if the listing has funds actively held in escrow
+      const escrowCheck = await db.query(
+        `SELECT id FROM orders WHERE listing_id = $1 AND fonlok_status IN ('pending', 'paid_in_escrow') LIMIT 1`,
+        [id],
+      );
+      if (escrowCheck.rows.length > 0) {
+        return res.status(409).json({
+          error: "Cannot delete a listing that has funds currently held in escrow. Resolve the active order first.",
+        });
+      }
+
+      // Use a transaction so partial deletes never persist
+      await db.query("BEGIN");
+
+      // orders.listing_id is NOT NULL with no CASCADE — must delete before listing
+      await db.query("DELETE FROM orders WHERE listing_id = $1", [id]);
+      // imagelistings has ON DELETE CASCADE but explicit delete ensures correctness
       await db.query("DELETE FROM imagelistings WHERE listingid = $1", [id]);
       await db.query("DELETE FROM userlistings WHERE id = $1", [id]);
+
+      await db.query("COMMIT");
 
       console.log(
         `Admin ${adminId} permanently deleted listing ${id} ("${listing.title}") owned by user ${listing.userid}`,
@@ -844,6 +862,7 @@ router.delete(
 
       res.status(200).json({ message: "Listing permanently deleted" });
     } catch (error) {
+      await db.query("ROLLBACK").catch(() => {});
       console.error("Error deleting listing:", error);
       res.status(500).json({ error: "Failed to delete listing" });
     }
