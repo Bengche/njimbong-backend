@@ -29,11 +29,14 @@ const ensureOffersTable = async () => {
         -- pending | accepted | declined | countered | expired | withdrawn
       counter_amount NUMERIC(12,2),
       counter_message TEXT,
+      round         INTEGER NOT NULL DEFAULT 1,
       expires_at    TIMESTAMP NOT NULL DEFAULT (NOW() + INTERVAL '48 hours'),
       created_at    TIMESTAMP DEFAULT NOW(),
       updated_at    TIMESTAMP DEFAULT NOW()
     )
   `);
+  // Back-fill column for databases created before this feature
+  await db.query(`ALTER TABLE offers ADD COLUMN IF NOT EXISTS round INTEGER NOT NULL DEFAULT 1`);
 };
 
 // ─── POST /api/offers — buyer makes an offer ──────────────────────────────────
@@ -230,7 +233,7 @@ router.put("/offers/:id", authMiddleware, async (req, res) => {
   const { id } = req.params;
   const { action, counter_amount, counter_message } = req.body;
   // Seller actions: 'accept' | 'decline' | 'counter'
-  // Buyer actions:  'accept_counter' | 'decline_counter'
+  // Buyer actions:  'accept_counter' | 'decline_counter' | 'buyer_counter'
 
   if (
     ![
@@ -239,6 +242,7 @@ router.put("/offers/:id", authMiddleware, async (req, res) => {
       "counter",
       "accept_counter",
       "decline_counter",
+      "buyer_counter",
     ].includes(action)
   ) {
     return res.status(400).json({ error: "Invalid action." });
@@ -305,6 +309,58 @@ router.put("/offers/:id", authMiddleware, async (req, res) => {
       }
 
       return res.json({ message: `Counter-offer ${newStatus}.` });
+    }
+
+    // ── Buyer submitting a revised offer after a seller counter ──────────────
+    if (action === "buyer_counter") {
+      if (offer.buyer_id !== userId) {
+        return res.status(403).json({ error: "Only the buyer can revise this offer." });
+      }
+      if (offer.status !== "countered") {
+        return res.status(409).json({ error: "You can only revise an offer after the seller has countered." });
+      }
+      const MAX_ROUNDS = 3;
+      if ((offer.round || 1) >= MAX_ROUNDS) {
+        return res.status(409).json({
+          error: "You have used all 3 negotiation rounds on this listing. Please accept or decline the seller\u2019s counter-offer.",
+        });
+      }
+
+      const { amount: newAmount, message: newMessage } = req.body;
+      const parsedNewAmount = parseFloat(newAmount);
+      if (isNaN(parsedNewAmount) || parsedNewAmount <= 0) {
+        return res.status(400).json({ error: "Invalid offer amount." });
+      }
+
+      const nextRound = (offer.round || 1) + 1;
+      await db.query(
+        `UPDATE offers
+         SET status = 'pending', amount = $1, message = $2,
+             counter_amount = NULL, counter_message = NULL,
+             round = $3, updated_at = NOW()
+         WHERE id = $4`,
+        [parsedNewAmount, newMessage || offer.message, nextRound, id],
+      );
+
+      sendPushToUser(
+        offer.seller_id,
+        buildNotificationPayload("new_offer", {
+          title: "Revised offer received",
+          body: `Buyer revised their offer to ${parsedNewAmount.toLocaleString()} ${offer.currency} on "${offer.title}".`,
+          url: `/listing/${offer.listing_id}`,
+        }),
+      );
+      db.query(
+        `INSERT INTO notifications (userid, title, message, type, relatedid, relatedtype)
+         VALUES ($1, 'Revised offer received', $2, 'offer', $3, 'listing')`,
+        [
+          offer.seller_id,
+          `Buyer revised their offer to ${parsedNewAmount.toLocaleString()} ${offer.currency} on "${offer.title}" (round ${nextRound} of ${MAX_ROUNDS}).`,
+          offer.listing_id,
+        ],
+      ).catch(() => {});
+
+      return res.json({ round: nextRound });
     }
 
     // ── Seller responding ─────────────────────────────────────────────────────
