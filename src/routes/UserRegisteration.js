@@ -69,12 +69,10 @@ router.post("/signup", upload.single("profileImage"), async (req, res) => {
     // Fire-and-forget — never block response on email
     sendEmailVerification(newUser, token);
 
-    res
-      .status(201)
-      .json({
-        message:
-          "Registration successful. Please check your email to verify your account.",
-      });
+    res.status(201).json({
+      message:
+        "Registration successful. Please check your email to verify your account.",
+    });
   } catch (error) {
     console.error("Error adding user to database:", error.message);
     res.status(500).json({ message: "Database error" });
