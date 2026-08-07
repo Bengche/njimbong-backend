@@ -53,7 +53,7 @@ router.post("/signup", upload.single("profileImage"), async (req, res) => {
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
     const userResult = await db.query(
-      "INSERT INTO users (name, username, email, phone, country, passwordHash, profilePictureUrl, createdat) VALUES ($1, $2, $3, $4, 'Cameroon', $5, $6, NOW()) RETURNING id, name, email",
+      "INSERT INTO users (name, username, email, phone, country, passwordHash, profilePictureUrl, email_verified, createdat) VALUES ($1, $2, $3, $4, 'Cameroon', $5, $6, FALSE, NOW()) RETURNING id, name, email",
       [name, username, email, phone, passwordHash, profilePictureUrl],
     );
     const newUser = userResult.rows[0];

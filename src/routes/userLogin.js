@@ -33,6 +33,16 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
+    // Block login for accounts with email verification explicitly pending
+    // (null = pre-verification-feature account; false = new account awaiting verification)
+    if (user.email_verified === false) {
+      return res.status(403).json({
+        message: "Please verify your email address before logging in.",
+        emailNotVerified: true,
+        email: user.email,
+      });
+    }
+
     // Check onboarding status
     let onboardingComplete = false;
     try {

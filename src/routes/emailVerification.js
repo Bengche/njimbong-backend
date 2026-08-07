@@ -2,7 +2,11 @@ import express from "express";
 import crypto from "crypto";
 import bcrypt from "bcrypt";
 import db from "../db.js";
-import { sendWelcomeEmail, sendPasswordResetEmail } from "../utils/email.js";
+import {
+  sendWelcomeEmail,
+  sendPasswordResetEmail,
+  sendEmailVerification,
+} from "../utils/email.js";
 
 const router = express.Router();
 
@@ -74,6 +78,68 @@ router.get("/verify-email", async (req, res) => {
     return res
       .status(500)
       .json({ success: false, message: "Server error. Please try again." });
+  }
+});
+
+// POST /auth/resend-verification
+router.post("/resend-verification", async (req, res) => {
+  const { email } = req.body;
+  if (!email || typeof email !== "string" || email.length > 255) {
+    return res
+      .status(400)
+      .json({ error: "A valid email address is required." });
+  }
+
+  try {
+    const userRes = await db.query(
+      "SELECT id, name, email, email_verified FROM users WHERE LOWER(email) = LOWER($1)",
+      [email.trim()],
+    );
+    // Generic response prevents email enumeration
+    const ok = {
+      message:
+        "If that email is pending verification, a new link has been sent.",
+    };
+
+    if (userRes.rows.length === 0) return res.json(ok);
+    const user = userRes.rows[0];
+    if (user.email_verified === true) return res.json(ok);
+
+    // Rate-limit: allow resend only if last token is older than 60 seconds
+    const recentCheck = await db.query(
+      `SELECT created_at FROM email_verifications
+       WHERE user_id = $1 AND used_at IS NULL
+       ORDER BY created_at DESC LIMIT 1`,
+      [user.id],
+    );
+    if (recentCheck.rows.length > 0) {
+      const lastSentAt = new Date(recentCheck.rows[0].created_at);
+      const secondsAgo = (Date.now() - lastSentAt.getTime()) / 1000;
+      if (secondsAgo < 60) {
+        const waitSeconds = Math.ceil(60 - secondsAgo);
+        return res.status(429).json({
+          error: `Please wait ${waitSeconds} second${waitSeconds !== 1 ? "s" : ""} before requesting another email.`,
+          retryAfter: waitSeconds,
+        });
+      }
+    }
+
+    // Invalidate old unused tokens and issue a fresh one
+    await db.query(
+      "UPDATE email_verifications SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL",
+      [user.id],
+    );
+    const token = crypto.randomBytes(48).toString("hex");
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await db.query(
+      "INSERT INTO email_verifications (user_id, token, expires_at) VALUES ($1, $2, $3)",
+      [user.id, token, expiresAt],
+    );
+    sendEmailVerification(user, token);
+    return res.json(ok);
+  } catch (err) {
+    console.error("[Auth] resend-verification error:", err.message);
+    return res.status(500).json({ error: "Server error. Please try again." });
   }
 });
 
@@ -174,11 +240,9 @@ router.post("/reset-password", async (req, res) => {
         .json({ error: "This link has already been used." });
     }
     if (new Date(row.expires_at) < new Date()) {
-      return res
-        .status(400)
-        .json({
-          error: "This reset link has expired. Please request a new one.",
-        });
+      return res.status(400).json({
+        error: "This reset link has expired. Please request a new one.",
+      });
     }
 
     const hash = await bcrypt.hash(newPassword, 12);
