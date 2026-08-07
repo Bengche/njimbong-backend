@@ -76,13 +76,15 @@ router.post("/offers", authMiddleware, blockIfSuspended, async (req, res) => {
 
     // Only one active offer per buyer per listing
     const existing = await db.query(
-      `SELECT id FROM offers WHERE listing_id=$1 AND buyer_id=$2 AND status='pending' LIMIT 1`,
+      `SELECT id FROM offers
+       WHERE listing_id=$1 AND buyer_id=$2 AND status IN ('pending','countered')
+       LIMIT 1`,
       [listing_id, buyerId],
     );
     if (existing.rows.length > 0) {
       return res
         .status(409)
-        .json({ error: "You already have a pending offer on this listing." });
+        .json({ error: "You already have an active offer on this listing. Withdraw or wait for a response before making another." });
     }
 
     const offerRes = await db.query(
