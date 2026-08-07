@@ -808,4 +808,46 @@ router.put("/admin/listings/:id/resubmit", authMiddleware, async (req, res) => {
   }
 });
 
+// =====================================================
+// DELETE: Delete Listing (admin permanent removal)
+// =====================================================
+router.delete(
+  "/admin/listings/:id",
+  authMiddleware,
+  adminCheck,
+  async (req, res) => {
+    const { id } = req.params;
+    const adminId = req.user.id;
+
+    try {
+      const listingResult = await db.query(
+        `SELECT ul.*, u.name as username, u.email as useremail
+         FROM userlistings ul
+         JOIN users u ON u.id = ul.userid
+         WHERE ul.id = $1`,
+        [id],
+      );
+
+      if (listingResult.rows.length === 0) {
+        return res.status(404).json({ error: "Listing not found" });
+      }
+
+      const listing = listingResult.rows[0];
+
+      // Remove images then the listing
+      await db.query("DELETE FROM imagelistings WHERE listingid = $1", [id]);
+      await db.query("DELETE FROM userlistings WHERE id = $1", [id]);
+
+      console.log(
+        `Admin ${adminId} permanently deleted listing ${id} ("${listing.title}") owned by user ${listing.userid}`,
+      );
+
+      res.status(200).json({ message: "Listing permanently deleted" });
+    } catch (error) {
+      console.error("Error deleting listing:", error);
+      res.status(500).json({ error: "Failed to delete listing" });
+    }
+  },
+);
+
 export default router;
