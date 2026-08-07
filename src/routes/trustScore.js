@@ -29,7 +29,7 @@ const getUserColumns = async () => {
   }
 
   const result = await pool.query(
-    "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'"
+    "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'",
   );
   cachedUserColumns = new Set(result.rows.map((row) => row.column_name));
   cachedUserColumnsAt = now;
@@ -46,7 +46,7 @@ const getUserColumnMap = (columns) => {
       "profilepictureurl",
       "profile_picture",
       "profile_picture_url",
-      "profilepictureurl"
+      "profilepictureurl",
     ),
     kycStatus: pick("kyc_status"),
   };
@@ -61,7 +61,7 @@ const getTableColumns = async (tableName) => {
 
   const result = await pool.query(
     "SELECT column_name FROM information_schema.columns WHERE table_name = $1",
-    [tableName]
+    [tableName],
   );
   const columns = new Set(result.rows.map((row) => row.column_name));
   cachedTableColumns.set(tableName, { columns, timestamp: now });
@@ -88,11 +88,20 @@ const getReviewColumnMap = (columns) => {
     reviewerIp: pick("reviewer_ip", "reviewerip"),
     reviewerDeviceFingerprint: pick(
       "reviewer_device_fingerprint",
-      "reviewerdevicefingerprint"
+      "reviewerdevicefingerprint",
     ),
     fraudScore: pick("fraud_score", "fraudscore"),
     fraudFlags: pick("fraud_flags", "fraudflags"),
   };
+};
+
+// Returns a user-facing message that accurately reflects KYC state
+const kycBlockMessage = (status) => {
+  if (status === "pending")
+    return "Your KYC verification is currently under review. You will be able to leave reviews once it is approved.";
+  if (status === "rejected")
+    return "Your KYC verification was not approved. Please resubmit your documents to leave reviews.";
+  return "You need to complete KYC verification before leaving reviews.";
 };
 
 const getListingsTable = async () => {
@@ -114,7 +123,7 @@ const getReviewerKycStatus = async (userId) => {
   if (columns.has("kyc_status")) {
     const reviewer = await pool.query(
       "SELECT kyc_status FROM users WHERE id = $1",
-      [userId]
+      [userId],
     );
     return {
       exists: true,
@@ -130,8 +139,8 @@ const getReviewerKycStatus = async (userId) => {
   const createdColumn = kycColumns.has("created_at")
     ? "created_at"
     : kycColumns.has("createdat")
-    ? "createdat"
-    : null;
+      ? "createdat"
+      : null;
 
   const orderBy = createdColumn
     ? `ORDER BY ${createdColumn} DESC NULLS LAST`
@@ -142,7 +151,7 @@ const getReviewerKycStatus = async (userId) => {
      WHERE userid = $1
      ${orderBy}
      LIMIT 1`,
-    [userId]
+    [userId],
   );
 
   return {
@@ -174,7 +183,7 @@ const getDeviceFingerprint = (req) => {
 
   // Create a simple fingerprint from available headers
   const fingerprint = Buffer.from(
-    `${userAgent}|${acceptLanguage}|${acceptEncoding}`
+    `${userAgent}|${acceptLanguage}|${acceptEncoding}`,
   )
     .toString("base64")
     .substring(0, 255);
@@ -185,7 +194,7 @@ const getDeviceFingerprint = (req) => {
 const tableExists = async (tableName) => {
   const result = await pool.query(
     "SELECT 1 FROM information_schema.tables WHERE table_name = $1",
-    [tableName]
+    [tableName],
   );
   return result.rowCount > 0;
 };
@@ -197,7 +206,7 @@ const calculateFraudScore = async (
   reviewerId,
   reviewedUserId,
   ip,
-  deviceFingerprint
+  deviceFingerprint,
 ) => {
   let fraudScore = 0;
   const fraudFlags = [];
@@ -207,7 +216,7 @@ const calculateFraudScore = async (
     const ipCheck = await pool.query(
       `SELECT COUNT(*) FROM user_reviews 
        WHERE reviewed_user_id = $1 AND reviewer_ip = $2 AND reviewer_id != $3`,
-      [reviewedUserId, ip, reviewerId]
+      [reviewedUserId, ip, reviewerId],
     );
     if (parseInt(ipCheck.rows[0].count) > 0) {
       fraudScore += 30;
@@ -221,7 +230,7 @@ const calculateFraudScore = async (
     const deviceCheck = await pool.query(
       `SELECT COUNT(*) FROM user_reviews 
        WHERE reviewed_user_id = $1 AND reviewer_device_fingerprint = $2 AND reviewer_id != $3`,
-      [reviewedUserId, deviceFingerprint, reviewerId]
+      [reviewedUserId, deviceFingerprint, reviewerId],
     );
     if (parseInt(deviceCheck.rows[0].count) > 0) {
       fraudScore += 40;
@@ -235,7 +244,7 @@ const calculateFraudScore = async (
     const velocityCheck = await pool.query(
       `SELECT COUNT(*) FROM user_reviews 
        WHERE reviewer_id = $1 AND created_at > NOW() - INTERVAL '24 hours'`,
-      [reviewerId]
+      [reviewerId],
     );
     if (parseInt(velocityCheck.rows[0].count) >= 5) {
       fraudScore += 25;
@@ -248,7 +257,7 @@ const calculateFraudScore = async (
     // 4. Check if reviewer account is very new
     const accountAge = await pool.query(
       `SELECT EXTRACT(DAY FROM (NOW() - createdat)) as days_old FROM users WHERE id = $1`,
-      [reviewerId]
+      [reviewerId],
     );
     if (accountAge.rows[0] && parseInt(accountAge.rows[0].days_old) < 7) {
       fraudScore += 15;
@@ -262,7 +271,7 @@ const calculateFraudScore = async (
     const reviewPattern = await pool.query(
       `SELECT COUNT(DISTINCT reviewed_user_id) as unique_reviewed, COUNT(*) as total
        FROM user_reviews WHERE reviewer_id = $1`,
-      [reviewerId]
+      [reviewerId],
     );
     if (reviewPattern.rows[0]) {
       const { unique_reviewed, total } = reviewPattern.rows[0];
@@ -291,33 +300,33 @@ const calculateTrustScoreJS = async (userId) => {
     const createdColumn = userColumns.has("createdat")
       ? "createdat"
       : userColumns.has("created_at")
-      ? "created_at"
-      : null;
+        ? "created_at"
+        : null;
 
     const selectParts = ["u.id"];
     selectParts.push(
-      userMap.name ? `u.${userMap.name} as name` : "NULL as name"
+      userMap.name ? `u.${userMap.name} as name` : "NULL as name",
     );
     selectParts.push(
       userMap.profilePicture
         ? `u.${userMap.profilePicture} as profilepicture`
-        : "NULL as profilepicture"
+        : "NULL as profilepicture",
     );
     selectParts.push(
-      userColumns.has("country") ? "u.country" : "NULL as country"
+      userColumns.has("country") ? "u.country" : "NULL as country",
     );
     selectParts.push(userColumns.has("phone") ? "u.phone" : "NULL as phone");
     selectParts.push(userColumns.has("bio") ? "u.bio" : "NULL as bio");
     selectParts.push(
-      userColumns.has("kyc_status") ? "u.kyc_status" : "NULL as kyc_status"
+      userColumns.has("kyc_status") ? "u.kyc_status" : "NULL as kyc_status",
     );
     selectParts.push(
-      createdColumn ? `u.${createdColumn} as created_at` : "NULL as created_at"
+      createdColumn ? `u.${createdColumn} as created_at` : "NULL as created_at",
     );
 
     const userResult = await pool.query(
       `SELECT ${selectParts.join(", ")} FROM users u WHERE u.id = $1`,
-      [userId]
+      [userId],
     );
 
     if (userResult.rows.length === 0) {
@@ -333,7 +342,7 @@ const calculateTrustScoreJS = async (userId) => {
       ? Math.max(
           0,
           (new Date().getFullYear() - createdAtValue.getFullYear()) * 12 +
-            (new Date().getMonth() - createdAtValue.getMonth())
+            (new Date().getMonth() - createdAtValue.getMonth()),
         )
       : 0;
 
@@ -395,8 +404,8 @@ const calculateTrustScoreJS = async (userId) => {
         const kycFilter = hasKycStatus
           ? "AND reviewer.kyc_status = 'approved'"
           : hasKycTable
-          ? "AND kv.status = 'approved'"
-          : "";
+            ? "AND kv.status = 'approved'"
+            : "";
 
         const ratingColumn = `r.${reviewMap.rating}`;
         const validFilter = reviewMap.isValid
@@ -476,7 +485,7 @@ const calculateTrustScoreJS = async (userId) => {
       const listingCount = await pool.query(
         `SELECT COUNT(*) FROM userlistings 
          WHERE userid = $1 AND status = 'Available' AND moderation_status = 'approved'`,
-        [userId]
+        [userId],
       );
       const activeListings = parseInt(listingCount.rows[0].count) || 0;
       if (activeListings >= 10) {
@@ -515,7 +524,7 @@ const calculateTrustScoreJS = async (userId) => {
     if (await tableExists("reports")) {
       const reportCount = await pool.query(
         `SELECT COUNT(*) FROM reports WHERE reported_user_id = $1 AND status = 'verified'`,
-        [userId]
+        [userId],
       );
       const reports = parseInt(reportCount.rows[0].count) || 0;
       if (reports > 0) {
@@ -529,7 +538,7 @@ const calculateTrustScoreJS = async (userId) => {
     if (await tableExists("userlistings")) {
       const rejectionCount = await pool.query(
         `SELECT COUNT(*) FROM userlistings WHERE userid = $1 AND moderation_status = 'rejected'`,
-        [userId]
+        [userId],
       );
       const rejections = parseInt(rejectionCount.rows[0].count) || 0;
       if (rejections > 0) {
@@ -543,7 +552,7 @@ const calculateTrustScoreJS = async (userId) => {
     if (await tableExists("user_suspensions")) {
       const suspensionCount = await pool.query(
         `SELECT COUNT(*) FROM user_suspensions WHERE user_id = $1`,
-        [userId]
+        [userId],
       );
       const suspensions = parseInt(suspensionCount.rows[0].count) || 0;
       if (suspensions > 0) {
@@ -561,7 +570,7 @@ const calculateTrustScoreJS = async (userId) => {
         `SELECT COALESCE(SUM(points_deducted), 0) as total
          FROM user_warnings WHERE user_id = $1 AND is_active = true 
          AND (expires_at IS NULL OR expires_at > NOW())`,
-        [userId]
+        [userId],
       );
       const warnings = parseInt(warningPoints.rows[0].total) || 0;
       if (warnings > 0) {
@@ -605,7 +614,7 @@ router.get("/user/:id/trust-score", async (req, res) => {
     try {
       const result = await pool.query(
         `SELECT * FROM calculate_trust_score($1)`,
-        [id]
+        [id],
       );
 
       if (result.rows.length > 0) {
@@ -667,7 +676,7 @@ router.get(
       console.error("Error fetching trust score breakdown:", error);
       res.status(500).json({ error: "Failed to fetch trust score breakdown" });
     }
-  }
+  },
 );
 
 /**
@@ -799,8 +808,8 @@ router.get("/user/:id/reviews", async (req, res) => {
     const reviewerKycSelect = hasKycStatus
       ? "reviewer.kyc_status as reviewer_kyc_status"
       : hasKycTable
-      ? "kv.status as reviewer_kyc_status"
-      : "NULL as reviewer_kyc_status";
+        ? "kv.status as reviewer_kyc_status"
+        : "NULL as reviewer_kyc_status";
 
     const reviewerKycJoin = hasKycTable
       ? "LEFT JOIN kyc_verifications kv ON kv.userid = reviewer.id"
@@ -825,7 +834,7 @@ router.get("/user/:id/reviews", async (req, res) => {
            COUNT(*) FILTER (WHERE ${reviewMap.isValid} = true) as valid_count
          FROM user_reviews
          WHERE ${reviewMap.reviewedUserId} = $1`,
-        [id]
+        [id],
       );
 
       const totalCount = parseInt(validityCheck.rows[0]?.total) || 0;
@@ -897,7 +906,7 @@ router.get("/user/:id/reviews", async (req, res) => {
          ${ratingFilter}
        ORDER BY ${orderByColumn} DESC
        LIMIT $2 OFFSET $3`,
-      [id, parseInt(limit), offset]
+      [id, parseInt(limit), offset],
     );
 
     // Get review statistics
@@ -917,7 +926,7 @@ router.get("/user/:id/reviews", async (req, res) => {
       WHERE ${reviewMap.reviewedUserId} = $1 ${
         validFilter ? `AND COALESCE(${reviewMap.isValid}, true) = true` : ""
       }`,
-      [id]
+      [id],
     );
 
     const statsData = stats.rows[0];
@@ -944,8 +953,8 @@ router.get("/user/:id/reviews", async (req, res) => {
           (review.rating >= 4
             ? "positive"
             : review.rating === 3
-            ? "neutral"
-            : "negative"),
+              ? "neutral"
+              : "negative"),
         listing: review.listing_id
           ? {
               id: review.listing_id,
@@ -1028,14 +1037,14 @@ router.post("/user/:id/review", authMiddleware, async (req, res) => {
     if (reviewerKyc.kycStatus !== "approved") {
       return res.status(403).json({
         error: "Only KYC-verified users can leave reviews",
-        message: "Please complete your KYC verification to leave reviews",
+        message: kycBlockMessage(reviewerKyc.kycStatus),
       });
     }
 
     // Check if reviewed user exists
     const reviewedUserCheck = await pool.query(
       `SELECT id FROM users WHERE id = $1`,
-      [reviewedUserId]
+      [reviewedUserId],
     );
 
     if (reviewedUserCheck.rows.length === 0) {
@@ -1059,7 +1068,7 @@ router.post("/user/:id/review", authMiddleware, async (req, res) => {
       const existingReview = await pool.query(
         `SELECT id FROM user_reviews 
          WHERE ${reviewMap.reviewerId} = $1 AND ${reviewMap.reviewedUserId} = $2 AND ${reviewMap.listingId} = $3`,
-        [reviewerId, reviewedUserId, listingId]
+        [reviewerId, reviewedUserId, listingId],
       );
 
       if (existingReview.rows.length > 0) {
@@ -1076,7 +1085,7 @@ router.post("/user/:id/review", authMiddleware, async (req, res) => {
       reviewerId,
       reviewedUserId,
       ip,
-      deviceFingerprint
+      deviceFingerprint,
     );
 
     // Determine if review should be auto-verified
@@ -1130,7 +1139,7 @@ router.post("/user/:id/review", authMiddleware, async (req, res) => {
       `INSERT INTO user_reviews (${insertColumns.join(", ")})
        VALUES (${placeholders.join(", ")})
        RETURNING id, created_at`,
-      insertValues
+      insertValues,
     );
 
     // Log fraud detection if flags were raised
@@ -1147,7 +1156,7 @@ router.post("/user/:id/review", authMiddleware, async (req, res) => {
           "auto_detection",
           JSON.stringify({ score: fraudScore, flags: fraudFlags }),
           fraudScore >= 70 ? "high" : fraudScore >= 40 ? "medium" : "low",
-        ]
+        ],
       );
     }
 
@@ -1202,7 +1211,7 @@ router.post(
       const review = await pool.query(
         `SELECT id, seller_response FROM user_reviews 
        WHERE id = $1 AND reviewed_user_id = $2`,
-        [reviewId, userId]
+        [reviewId, userId],
       );
 
       if (review.rows.length === 0) {
@@ -1220,7 +1229,7 @@ router.post(
         `UPDATE user_reviews 
        SET seller_response = $1, seller_response_at = NOW(), updated_at = NOW()
        WHERE id = $2`,
-        [response.trim(), reviewId]
+        [response.trim(), reviewId],
       );
 
       res.json({ message: "Response added successfully" });
@@ -1228,7 +1237,7 @@ router.post(
       console.error("Error adding response:", error);
       res.status(500).json({ error: "Failed to add response" });
     }
-  }
+  },
 );
 
 /**
@@ -1271,7 +1280,7 @@ router.post(
               } as reviewer_id
        FROM user_reviews r
        WHERE r.id = $1`,
-        [reviewId]
+        [reviewId],
       );
 
       if (reviewResult.rows.length === 0) {
@@ -1304,7 +1313,7 @@ router.post(
         `UPDATE user_reviews
        SET ${updateParts.join(", ")}
        WHERE id = $1`,
-        [reviewId, flagsPayload]
+        [reviewId, flagsPayload],
       );
 
       if (await tableExists("review_fraud_log")) {
@@ -1323,7 +1332,7 @@ router.post(
               "medium",
               "flagged",
               reporterId,
-            ]
+            ],
           );
         } catch (logError) {
           console.error("Error logging review report:", logError);
@@ -1335,7 +1344,7 @@ router.post(
       console.error("Error reporting review:", error);
       res.status(500).json({ error: "Failed to report review" });
     }
-  }
+  },
 );
 
 /**
@@ -1358,7 +1367,7 @@ router.get("/user/can-review/:userId", authMiddleware, async (req, res) => {
       return res.json({
         canReview: false,
         reason: "KYC verification required",
-        message: "Complete your KYC verification to leave reviews",
+        message: kycBlockMessage(reviewerKyc.kycStatus),
       });
     }
 
@@ -1366,7 +1375,7 @@ router.get("/user/can-review/:userId", authMiddleware, async (req, res) => {
     const existingReview = await pool.query(
       `SELECT id FROM user_reviews 
        WHERE reviewer_id = $1 AND reviewed_user_id = $2`,
-      [reviewerId, targetUserId]
+      [reviewerId, targetUserId],
     );
 
     if (existingReview.rows.length > 0) {
@@ -1405,7 +1414,7 @@ const adminMiddleware = async (req, res, next) => {
 
     const admin = await pool.query(
       `SELECT id, email FROM admins WHERE token = $1`,
-      [adminToken]
+      [adminToken],
     );
 
     if (admin.rows.length === 0) {
@@ -1456,7 +1465,7 @@ router.post("/admin/user/:id/warning", adminMiddleware, async (req, res) => {
       `INSERT INTO user_warnings (user_id, admin_id, warning_type, reason, points_deducted, expires_at)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, created_at`,
-      [userId, adminId, warningType, reason.trim(), pointsDeducted, expiresAt]
+      [userId, adminId, warningType, reason.trim(), pointsDeducted, expiresAt],
     );
 
     res.status(201).json({
@@ -1499,12 +1508,12 @@ router.get("/admin/reviews/flagged", adminMiddleware, async (req, res) => {
        WHERE r.fraud_score >= 40 OR jsonb_array_length(r.fraud_flags) > 0
        ORDER BY r.fraud_score DESC, r.created_at DESC
        LIMIT $1 OFFSET $2`,
-      [parseInt(limit), offset]
+      [parseInt(limit), offset],
     );
 
     const countResult = await pool.query(
       `SELECT COUNT(*) FROM user_reviews 
-       WHERE fraud_score >= 40 OR jsonb_array_length(fraud_flags) > 0`
+       WHERE fraud_score >= 40 OR jsonb_array_length(fraud_flags) > 0`,
     );
 
     res.json({
@@ -1514,7 +1523,7 @@ router.get("/admin/reviews/flagged", adminMiddleware, async (req, res) => {
         limit: parseInt(limit),
         total: parseInt(countResult.rows[0].count),
         totalPages: Math.ceil(
-          parseInt(countResult.rows[0].count) / parseInt(limit)
+          parseInt(countResult.rows[0].count) / parseInt(limit),
         ),
       },
     });
@@ -1536,7 +1545,7 @@ router.put("/admin/review/:id/verify", adminMiddleware, async (req, res) => {
       `UPDATE user_reviews 
        SET is_verified = true, verification_method = 'admin_verified', updated_at = NOW()
        WHERE id = $1`,
-      [reviewId]
+      [reviewId],
     );
 
     res.json({ message: "Review verified successfully" });
@@ -1569,13 +1578,13 @@ router.put(
             { type: "admin_invalidated", reason, at: new Date() },
           ]),
           reviewId,
-        ]
+        ],
       );
 
       // Log the action
       const review = await pool.query(
         `SELECT reviewer_id, reviewed_user_id FROM user_reviews WHERE id = $1`,
-        [reviewId]
+        [reviewId],
       );
 
       if (review.rows.length > 0) {
@@ -1593,7 +1602,7 @@ router.put(
             "high",
             "invalidated",
             req.admin.id,
-          ]
+          ],
         );
       }
 
@@ -1602,7 +1611,7 @@ router.put(
       console.error("Error invalidating review:", error);
       res.status(500).json({ error: "Failed to invalidate review" });
     }
-  }
+  },
 );
 
 /**
@@ -1638,7 +1647,7 @@ router.get("/admin/trust-scores", adminMiddleware, async (req, res) => {
        FROM users
        ORDER BY ${sortColumn} ${sortOrder}
        LIMIT $1 OFFSET $2`,
-      [parseInt(limit), offset]
+      [parseInt(limit), offset],
     );
 
     const countResult = await pool.query(`SELECT COUNT(*) FROM users`);
@@ -1650,7 +1659,7 @@ router.get("/admin/trust-scores", adminMiddleware, async (req, res) => {
         limit: parseInt(limit),
         total: parseInt(countResult.rows[0].count),
         totalPages: Math.ceil(
-          parseInt(countResult.rows[0].count) / parseInt(limit)
+          parseInt(countResult.rows[0].count) / parseInt(limit),
         ),
       },
     });
@@ -1675,21 +1684,21 @@ router.post(
       try {
         await pool.query(
           `SELECT update_user_trust_score($1, 'admin_recalculation')`,
-          [userId]
+          [userId],
         );
       } catch {
         // Use JS fallback
         const { trustScore } = await calculateTrustScoreJS(userId);
         await pool.query(
           `UPDATE users SET trust_score = $1, trust_score_updated_at = NOW() WHERE id = $2`,
-          [trustScore, userId]
+          [trustScore, userId],
         );
       }
 
       // Get updated score
       const result = await pool.query(
         `SELECT trust_score FROM users WHERE id = $1`,
-        [userId]
+        [userId],
       );
 
       res.json({
@@ -1700,7 +1709,7 @@ router.post(
       console.error("Error recalculating trust score:", error);
       res.status(500).json({ error: "Failed to recalculate trust score" });
     }
-  }
+  },
 );
 
 export default router;
