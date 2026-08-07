@@ -990,7 +990,7 @@ router.post(
           // Pass saved MoMo number so Fonlok can route refunds in disputes.
           // Falls back to empty string if buyer has never topped up their wallet.
           buyerPhone: buyer.momo_phone || "",
-          description: `Wallet purchase: ${listing.title}`,
+          description: listing.description,
           orderId: `wallet-${Date.now()}`,
           expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
         });
