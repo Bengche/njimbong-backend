@@ -36,7 +36,9 @@ const ensureOffersTable = async () => {
     )
   `);
   // Back-fill column for databases created before this feature
-  await db.query(`ALTER TABLE offers ADD COLUMN IF NOT EXISTS round INTEGER NOT NULL DEFAULT 1`);
+  await db.query(
+    `ALTER TABLE offers ADD COLUMN IF NOT EXISTS round INTEGER NOT NULL DEFAULT 1`,
+  );
 };
 
 // ─── POST /api/offers — buyer makes an offer ──────────────────────────────────
@@ -85,12 +87,10 @@ router.post("/offers", authMiddleware, blockIfSuspended, async (req, res) => {
       [listing_id, buyerId],
     );
     if (existing.rows.length > 0) {
-      return res
-        .status(409)
-        .json({
-          error:
-            "You already have an active offer on this listing. Withdraw or wait for a response before making another.",
-        });
+      return res.status(409).json({
+        error:
+          "You already have an active offer on this listing. Withdraw or wait for a response before making another.",
+      });
     }
 
     const offerRes = await db.query(
@@ -314,15 +314,23 @@ router.put("/offers/:id", authMiddleware, async (req, res) => {
     // ── Buyer submitting a revised offer after a seller counter ──────────────
     if (action === "buyer_counter") {
       if (offer.buyer_id !== userId) {
-        return res.status(403).json({ error: "Only the buyer can revise this offer." });
+        return res
+          .status(403)
+          .json({ error: "Only the buyer can revise this offer." });
       }
       if (offer.status !== "countered") {
-        return res.status(409).json({ error: "You can only revise an offer after the seller has countered." });
+        return res
+          .status(409)
+          .json({
+            error:
+              "You can only revise an offer after the seller has countered.",
+          });
       }
       const MAX_ROUNDS = 3;
       if ((offer.round || 1) >= MAX_ROUNDS) {
         return res.status(409).json({
-          error: "You have used all 3 negotiation rounds on this listing. Please accept or decline the seller\u2019s counter-offer.",
+          error:
+            "You have used all 3 negotiation rounds on this listing. Please accept or decline the seller\u2019s counter-offer.",
         });
       }
 
