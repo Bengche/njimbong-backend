@@ -63,7 +63,218 @@ PERSONALITY:
 - Straightforward — no fluff, just value
 - Slightly persuasive about the platform's benefits when it's genuinely relevant
 
-End every first response (if the user hasn't stated a specific need) with ONE brief, relevant question to better help them.`;
+End every first response (if the user hasn't stated a specific need) with ONE brief, relevant question to better help them.
+
+LISTING RESULTS RULES (CRITICAL):
+- You will sometimes receive a block labelled "LIVE LISTINGS FROM NJIMBONG" — these are real items currently on the platform.
+- If listings are provided, base your answer ONLY on those results. Name specific listings and their prices.
+- If no listings are provided or the block is empty, say honestly: "I don't see any listings matching that right now" — do NOT invent inventory.
+- Always encourage the user to check the marketplace for the latest items.
+- Format prices in the listing's currency (usually XAF).`;
+
+// ── Listing search helpers ───────────────────────────────────────────────────
+
+const STOPWORDS = new Set([
+  "i",
+  "a",
+  "an",
+  "the",
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "been",
+  "have",
+  "has",
+  "had",
+  "do",
+  "does",
+  "did",
+  "will",
+  "would",
+  "shall",
+  "should",
+  "may",
+  "might",
+  "must",
+  "can",
+  "could",
+  "to",
+  "of",
+  "in",
+  "on",
+  "at",
+  "by",
+  "for",
+  "with",
+  "about",
+  "from",
+  "into",
+  "that",
+  "this",
+  "it",
+  "we",
+  "you",
+  "he",
+  "she",
+  "they",
+  "them",
+  "our",
+  "my",
+  "your",
+  "his",
+  "her",
+  "me",
+  "him",
+  "us",
+  "and",
+  "or",
+  "but",
+  "not",
+  "no",
+  "so",
+  "if",
+  "then",
+  "than",
+  "as",
+  "up",
+  "out",
+  "what",
+  "which",
+  "who",
+  "how",
+  "when",
+  "where",
+  "why",
+  "just",
+  "also",
+  "now",
+  "here",
+  "there",
+  "very",
+  "too",
+  "want",
+  "need",
+  "looking",
+  "find",
+  "get",
+  "buy",
+  "sell",
+  "show",
+  "tell",
+  "know",
+  "please",
+  "njimbong",
+  "platform",
+  "marketplace",
+  "any",
+  "some",
+  "like",
+  "more",
+  "much",
+  "than",
+]);
+
+/** Detect whether a user message is likely product/shopping-related. */
+export function hasShoppingSignal(message) {
+  const words = new Set(message.toLowerCase().split(/\W+/));
+  const signals = [
+    "buy",
+    "sell",
+    "want",
+    "need",
+    "looking",
+    "find",
+    "show",
+    "available",
+    "price",
+    "cost",
+    "cheap",
+    "sale",
+    "any",
+    "have",
+    "get",
+    "purchase",
+    "second",
+    "brand",
+    "new",
+    "used",
+    "near",
+    "much",
+    "how",
+    "afford",
+    "stock",
+    "listing",
+    "item",
+    "product",
+  ];
+  return signals.some((s) => words.has(s));
+}
+
+/**
+ * Search live listings matching the user's message.
+ * Returns up to 6 results with title, price, image, etc.
+ * @param {string} message
+ * @param {import('../db.js').default} db
+ */
+export async function searchListingsForAI(message, db) {
+  const terms = [
+    ...new Set(
+      message
+        .toLowerCase()
+        .replace(/[^\w\s]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length > 2 && !STOPWORDS.has(w)),
+    ),
+  ].slice(0, 5);
+
+  if (terms.length === 0) return [];
+
+  // Build parameterised OR conditions across title, description, category
+  const conditions = terms
+    .map(
+      (_, i) =>
+        `(l.title ILIKE $${i + 1} OR l.description ILIKE $${i + 1} OR c.name ILIKE $${i + 1})`,
+    )
+    .join(" OR ");
+  const params = terms.map((t) => `%${t}%`);
+
+  try {
+    const result = await db.query(
+      `
+      SELECT
+        l.id,
+        l.title,
+        l.price,
+        l.currency,
+        l.city,
+        l.location,
+        l.condition,
+        c.name AS category,
+        img.imageurl AS image_url
+      FROM userlistings l
+      LEFT JOIN categories c ON l.categoryid = c.id
+      LEFT JOIN LATERAL (
+        SELECT imageurl FROM imagelistings
+        WHERE listingid = l.id
+        ORDER BY is_main DESC NULLS LAST, created_at ASC
+        LIMIT 1
+      ) img ON true
+      WHERE l.status = 'active'
+        AND l.moderation_status = 'approved'
+        AND (${conditions})
+      ORDER BY l.createdat DESC
+      LIMIT 6
+    `,
+      params,
+    );
+    return result.rows;
+  } catch (err) {
+    console.warn("[AI] Listing search failed:", err.message);
+    return [];
+  }
+}
 
 // ── Chat (streaming) ──────────────────────────────────────────────────────────
 /**
@@ -72,15 +283,39 @@ End every first response (if the user hasn't stated a specific need) with ONE br
  * @param {Array<{role: string, content: string}>} history - Previous turns
  * @param {string} pageContext - What page the user is on
  * @param {import('http').ServerResponse} res - Express response (SSE)
+ * @param {Array} listingResults - Live listings from DB search
  */
-export async function streamChatResponse(message, history, pageContext, res) {
+export async function streamChatResponse(
+  message,
+  history,
+  pageContext,
+  res,
+  listingResults = [],
+) {
   const genAI = getClient();
+
+  // Build listing context block to inject into the system prompt
+  let listingContextBlock = "";
+  if (listingResults.length > 0) {
+    const formatted = listingResults
+      .map(
+        (l) =>
+          `• [ID:${l.id}] "${l.title}" — ${l.currency || "XAF"} ${Number(l.price).toLocaleString()} | Condition: ${l.condition || "N/A"} | Location: ${l.city || l.location || "N/A"} | Category: ${l.category || "N/A"}`,
+      )
+      .join("\n");
+    listingContextBlock = `\n\nLIVE LISTINGS FROM NJIMBONG (${listingResults.length} result${listingResults.length > 1 ? "s" : ""}):\n${formatted}\n\nBase your answer on these results. Be specific — name the listings, their prices, and locations.`;
+  } else if (listingResults !== null) {
+    // Search was done but returned nothing
+    listingContextBlock = `\n\nLIVE LISTINGS FROM NJIMBONG: No listings found matching the user's query at this time. Be honest about this and suggest the user browse the marketplace or try different keywords.`;
+  }
+
   const model = genAI.getGenerativeModel(
     {
       model: "gemini-3.5-flash",
       systemInstruction:
         NJIMBONG_SYSTEM_PROMPT +
-        (pageContext ? `\n\nCURRENT USER CONTEXT: ${pageContext}` : ""),
+        (pageContext ? `\n\nCURRENT USER CONTEXT: ${pageContext}` : "") +
+        listingContextBlock,
     },
     AI_REQUEST_OPTIONS,
   );
@@ -103,6 +338,11 @@ export async function streamChatResponse(message, history, pageContext, res) {
     Connection: "keep-alive",
     "X-Accel-Buffering": "no",
   });
+
+  // Send listing cards first so the frontend can render them immediately
+  if (listingResults.length > 0) {
+    res.write(`data: ${JSON.stringify({ listings: listingResults })}\n\n`);
+  }
 
   for await (const chunk of result.stream) {
     const text = chunk.text();

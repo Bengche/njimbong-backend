@@ -15,6 +15,8 @@ import {
   getSearchSuggestions,
   analyzeImageForVisualSearch,
   generateSEODescription,
+  searchListingsForAI,
+  hasShoppingSignal,
 } from "../services/aiService.js";
 
 const router = express.Router();
@@ -87,7 +89,18 @@ router.post("/ai/chat", requireAI, aiLimiter, async (req, res) => {
     : [];
 
   try {
-    await streamChatResponse(message.trim(), safeHistory, pageContext, res);
+    // Search real listings if the message has shopping/product intent
+    const listingResults = hasShoppingSignal(message)
+      ? await searchListingsForAI(message.trim(), db)
+      : [];
+
+    await streamChatResponse(
+      message.trim(),
+      safeHistory,
+      pageContext,
+      res,
+      listingResults,
+    );
   } catch (err) {
     console.error("AI chat error:", err.message);
     if (!res.headersSent) {
