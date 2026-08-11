@@ -4,9 +4,6 @@
  */
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-
-// Use stable Gemini model string that is guaranteed on legacy SDK
 const MODEL_NAME = "gemini-flash-latest";
 
 function getClient() {
@@ -174,17 +171,11 @@ const STOPWORDS = new Set([
   "than",
 ]);
 
-/** Always perform database search if message contains meaningful keywords */
 export function hasShoppingSignal(message) {
   if (!message || typeof message !== "string") return false;
   return message.trim().length > 2;
 }
 
-/**
- * Search live listings matching the user's message.
- * @param {string} message
- * @param {object} db - Database pool instance
- */
 export async function searchListingsForAI(message, db) {
   const terms = [
     ...new Set(
@@ -198,7 +189,6 @@ export async function searchListingsForAI(message, db) {
 
   if (terms.length === 0) return [];
 
-  // Build parameterized OR conditions
   const conditions = terms
     .map(
       (_, i) =>
@@ -332,7 +322,10 @@ export async function enhanceText(text, context, extraContext = "") {
 
   const contextPrompts = {
     listing_description: `You are an expert marketplace copywriter for Njimbong...`,
-    // (Rest of prompts unchanged)
+    listing_title: `You are an expert marketplace copywriter. Rewrite this product listing title to be clear, searchable, and compelling. Include brand name, model, and key spec if relevant. Max 80 characters. Cameroonian marketplace context. Return ONLY JSON with "enhanced" and "tips".`,
+    chat_message: `Improve this marketplace chat message to be more professional, clear, and polite while keeping the original intent. Keep it concise. Return ONLY JSON with "enhanced" (improved message) and "tips" (1-2 brief notes).`,
+    dispute: `Rewrite this dispute message to be professional, factual, and persuasive. Keep a neutral tone. Return ONLY JSON with "enhanced" and "tips".`,
+    review: `Improve this review to be helpful, balanced, specific, and professional. Keep the original sentiment. Return ONLY JSON with "enhanced" and "tips".`,
   };
 
   const prompt = `${contextPrompts[context] || contextPrompts.listing_description}
@@ -357,5 +350,232 @@ IMPORTANT: Return ONLY valid JSON, nothing else. No markdown.`;
       enhanced: text,
       tips: ["AI enhancement not available at this time."],
     };
+  }
+}
+
+// ── Visual Search ─────────────────────────────────────────────────────────────
+
+export async function analyzeImageForVisualSearch(
+  imageBuffer,
+  mimeType,
+  categories,
+) {
+  const genAI = getClient();
+  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+
+  const categoryNames = (categories || []).map((c) => c.name).join(", ");
+
+  const prompt = `You are a visual search assistant for Njimbong, a Cameroonian online marketplace.
+
+Analyze this image and identify what product/item is shown. Extract search terms that would help find this or similar items in an online marketplace.
+
+Available categories: ${categoryNames}
+
+Return ONLY valid JSON:
+{
+  "searchQuery": "the best single search query to find this item (2-5 words)",
+  "category": "the most matching category name from the list, or null",
+  "keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5"],
+  "productDescription": "one sentence describing what you see"
+}
+
+IMPORTANT: Return ONLY valid JSON. No markdown.`;
+
+  const imagePart = {
+    inlineData: {
+      data: imageBuffer.toString("base64"),
+      mimeType,
+    },
+  };
+
+  try {
+    const result = await model.generateContent([prompt, imagePart]);
+    const raw = result.response.text().trim();
+    const clean = raw
+      .replace(/^```json\s*/, "")
+      .replace(/^```\s*/, "")
+      .replace(/```$/, "")
+      .trim();
+    return JSON.parse(clean);
+  } catch {
+    throw new Error("Could not analyze image");
+  }
+}
+
+// ── Listing Image Analysis ────────────────────────────────────────────────────
+
+export async function analyzeListingImage(imageBuffer, mimeType, categories) {
+  const genAI = getClient();
+  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+
+  const categoryList = (categories || [])
+    .map((c) => `${c.id}: ${c.name}`)
+    .join(", ");
+
+  const prompt = `You are an expert marketplace listing assistant for Njimbong, a Cameroonian online marketplace.
+
+Analyze this product image and generate a COMPLETE, fully-detailed listing.
+
+Available categories (id: name): ${categoryList}
+
+Return ONLY a valid JSON object with these EXACT keys:
+{
+  "title": "Clear product title",
+  "description": "Full product description",
+  "condition": "new" or "like new" or "good" or "fair" or "poor",
+  "categoryId": number or null,
+  "suggestedPriceMin": number,
+  "suggestedPriceMax": number,
+  "tags": "comma-separated relevant keywords"
+}
+
+IMPORTANT: Return ONLY valid JSON. No markdown.`;
+
+  const imagePart = {
+    inlineData: {
+      data: imageBuffer.toString("base64"),
+      mimeType,
+    },
+  };
+
+  try {
+    const result = await model.generateContent([prompt, imagePart]);
+    const raw = result.response.text().trim();
+    const clean = raw
+      .replace(/^```json\s*/, "")
+      .replace(/^```\s*/, "")
+      .replace(/```$/, "")
+      .trim();
+    return JSON.parse(clean);
+  } catch {
+    throw new Error("Could not parse AI response");
+  }
+}
+
+// ── Chat Summarization ────────────────────────────────────────────────────────
+
+export async function summarizeConversation(messages) {
+  const genAI = getClient();
+  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+
+  const transcript = (messages || [])
+    .filter((m) => m.content && m.message_type === "text")
+    .slice(-50)
+    .map((m) => `${m.sender_name}: ${m.content}`)
+    .join("\n");
+
+  if (!transcript.trim()) {
+    return {
+      summary: "No text messages to summarize.",
+      keyPoints: [],
+      status: "empty",
+    };
+  }
+
+  const prompt = `You are summarizing a marketplace chat conversation for Njimbong platform. Be concise and professional.
+
+Conversation:
+${transcript}
+
+Return ONLY valid JSON:
+{
+  "summary": "2-3 sentence summary",
+  "keyPoints": ["point 1", "point 2"],
+  "status": "negotiating" or "agreed" or "inquiry" or "completed" or "disputed" or "other"
+}
+
+IMPORTANT: Return ONLY valid JSON. No markdown.`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const raw = result.response.text().trim();
+    const clean = raw
+      .replace(/^```json\s*/, "")
+      .replace(/^```\s*/, "")
+      .replace(/```$/, "")
+      .trim();
+    return JSON.parse(clean);
+  } catch {
+    return {
+      summary: "Unable to generate summary at this time.",
+      keyPoints: [],
+      status: "other",
+    };
+  }
+}
+
+// ── Smart Search Suggestions ──────────────────────────────────────────────────
+
+export async function getSearchSuggestions(
+  query,
+  categories,
+  recentSearches = [],
+) {
+  const genAI = getClient();
+  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+
+  const categoryNames = (categories || []).map((c) => c.name).join(", ");
+
+  const prompt = `You are a smart search assistant for Njimbong, a Cameroonian online marketplace.
+
+User is searching for: "${query}"
+Available categories: ${categoryNames}
+
+Return ONLY valid JSON:
+{
+  "suggestions": ["suggestion 1", "suggestion 2"],
+  "refinements": ["refinement 1", "refinement 2"]
+}
+
+IMPORTANT: Return ONLY valid JSON. No markdown.`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const raw = result.response.text().trim();
+    const clean = raw
+      .replace(/^```json\s*/, "")
+      .replace(/^```\s*/, "")
+      .replace(/```$/, "")
+      .trim();
+    return JSON.parse(clean);
+  } catch {
+    return { suggestions: [], refinements: [] };
+  }
+}
+
+// ── Generate SEO Listing Description ─────────────────────────────────────────
+
+export async function generateSEODescription(listing) {
+  const genAI = getClient();
+  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+
+  const prompt = `You are an SEO copywriter for Njimbong, Cameroon's premier online marketplace.
+
+Write an SEO-optimized product listing description for:
+- Title: ${listing.title}
+- Category: ${listing.category}
+- Condition: ${listing.condition}
+- Price: ${listing.price} XAF
+- City: ${listing.city}, Cameroon
+
+Return ONLY valid JSON:
+{
+  "description": "the full SEO-optimized description",
+  "seoTips": ["tip 1", "tip 2"]
+}
+
+IMPORTANT: Return ONLY valid JSON. No markdown.`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const raw = result.response.text().trim();
+    const clean = raw
+      .replace(/^```json\s*/, "")
+      .replace(/^```\s*/, "")
+      .replace(/```$/, "")
+      .trim();
+    return JSON.parse(clean);
+  } catch {
+    return { description: "", seoTips: [] };
   }
 }
