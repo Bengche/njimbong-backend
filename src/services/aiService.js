@@ -4,7 +4,12 @@
  */
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const MODEL_NAME = "gemini-flash-latest";
+// Fallback tier of models (matches your working fallback setup)
+const GEMINI_MODELS = [
+  "gemini-flash-latest",
+  "gemini-3.5-flash-lite",
+  "gemini-flash-lite-latest",
+];
 
 function getClient() {
   const key = process.env.GEMINI_API_KEY;
@@ -12,6 +17,31 @@ function getClient() {
     throw new Error("GEMINI_API_KEY is not configured");
   }
   return new GoogleGenerativeAI(key);
+}
+
+/**
+ * Executes a unary generation request across GEMINI_MODELS with fallback.
+ */
+async function generateWithFallback(contents, options = {}) {
+  const genAI = getClient();
+  let lastError;
+
+  for (const modelName of GEMINI_MODELS) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction: options.systemInstruction,
+        generationConfig: options.generationConfig,
+      });
+
+      return await model.generateContent(contents);
+    } catch (err) {
+      lastError = err;
+      console.warn(`[AI Fallback] Model ${modelName} failed:`, err.message);
+    }
+  }
+
+  throw lastError || new Error("All Gemini models failed.");
 }
 
 // ── System Prompt ─────────────────────────────────────────────────────────────
@@ -168,7 +198,6 @@ const STOPWORDS = new Set([
   "like",
   "more",
   "much",
-  "than",
 ]);
 
 export function hasShoppingSignal(message) {
@@ -232,7 +261,7 @@ export async function searchListingsForAI(message, db) {
   }
 }
 
-// ── Chat (streaming) ──────────────────────────────────────────────────────────
+// ── Chat (streaming with model fallback) ──────────────────────────────────────
 
 export async function streamChatResponse(
   message,
@@ -256,24 +285,10 @@ export async function streamChatResponse(
     listingContextBlock = `\n\n[LIVE LISTINGS FROM NJIMBONG]: No active listings matched this search in the database. State clearly that no current matching items were found, and ask if they would like to refine their search or browse categories.`;
   }
 
-  const model = genAI.getGenerativeModel({
-    model: MODEL_NAME,
-    systemInstruction: {
-      role: "system",
-      parts: [
-        {
-          text:
-            NJIMBONG_SYSTEM_PROMPT +
-            (pageContext ? `\n\nCURRENT USER CONTEXT: ${pageContext}` : "") +
-            listingContextBlock,
-        },
-      ],
-    },
-    generationConfig: {
-      maxOutputTokens: 1000,
-      temperature: 0.7,
-    },
-  });
+  const systemInstructionText =
+    NJIMBONG_SYSTEM_PROMPT +
+    (pageContext ? `\n\nCURRENT USER CONTEXT: ${pageContext}` : "") +
+    listingContextBlock;
 
   const geminiHistory = (history || [])
     .filter((m) => m.role === "user" || m.role === "assistant")
@@ -281,8 +296,6 @@ export async function streamChatResponse(
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text: m.content || "" }],
     }));
-
-  const chat = model.startChat({ history: geminiHistory });
 
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
@@ -295,18 +308,47 @@ export async function streamChatResponse(
     res.write(`data: ${JSON.stringify({ listings: listingResults })}\n\n`);
   }
 
-  try {
-    const result = await chat.sendMessageStream(message);
-    for await (const chunk of result.stream) {
-      const text = chunk.text();
-      if (text) {
-        res.write(`data: ${JSON.stringify({ text })}\n\n`);
+  let streamSuccess = false;
+
+  for (const modelName of GEMINI_MODELS) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction: {
+          role: "system",
+          parts: [{ text: systemInstructionText }],
+        },
+        generationConfig: {
+          maxOutputTokens: 1000,
+          temperature: 0.7,
+        },
+      });
+
+      const chat = model.startChat({ history: geminiHistory });
+      const result = await chat.sendMessageStream(message);
+
+      for await (const chunk of result.stream) {
+        const text = chunk.text();
+        if (text) {
+          res.write(`data: ${JSON.stringify({ text })}\n\n`);
+        }
       }
+
+      streamSuccess = true;
+      break;
+    } catch (err) {
+      console.warn(
+        `[AI Streaming Error] Model ${modelName} failed:`,
+        err.message,
+      );
     }
-  } catch (err) {
-    console.error("[AI Streaming Error]:", err.message);
+  }
+
+  if (!streamSuccess) {
     res.write(
-      `data: ${JSON.stringify({ text: "\n\nI encountered an issue fetching live marketplace data. Please try again shortly." })}\n\n`,
+      `data: ${JSON.stringify({
+        text: "\n\nI encountered an issue fetching live marketplace data. Please try again shortly.",
+      })}\n\n`,
     );
   }
 
@@ -317,9 +359,6 @@ export async function streamChatResponse(
 // ── Text Enhancement ──────────────────────────────────────────────────────────
 
 export async function enhanceText(text, context, extraContext = "") {
-  const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-
   const contextPrompts = {
     listing_description: `You are an expert marketplace copywriter for Njimbong...`,
     listing_title: `You are an expert marketplace copywriter. Rewrite this product listing title to be clear, searchable, and compelling. Include brand name, model, and key spec if relevant. Max 80 characters. Cameroonian marketplace context. Return ONLY JSON with "enhanced" and "tips".`,
@@ -337,7 +376,7 @@ Original text:
 IMPORTANT: Return ONLY valid JSON, nothing else. No markdown.`;
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await generateWithFallback(prompt);
     const raw = result.response.text().trim();
     const clean = raw
       .replace(/^```json\s*/, "")
@@ -360,9 +399,6 @@ export async function analyzeImageForVisualSearch(
   mimeType,
   categories,
 ) {
-  const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-
   const categoryNames = (categories || []).map((c) => c.name).join(", ");
 
   const prompt = `You are a visual search assistant for Njimbong, a Cameroonian online marketplace.
@@ -389,7 +425,7 @@ IMPORTANT: Return ONLY valid JSON. No markdown.`;
   };
 
   try {
-    const result = await model.generateContent([prompt, imagePart]);
+    const result = await generateWithFallback([prompt, imagePart]);
     const raw = result.response.text().trim();
     const clean = raw
       .replace(/^```json\s*/, "")
@@ -405,9 +441,6 @@ IMPORTANT: Return ONLY valid JSON. No markdown.`;
 // ── Listing Image Analysis ────────────────────────────────────────────────────
 
 export async function analyzeListingImage(imageBuffer, mimeType, categories) {
-  const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-
   const categoryList = (categories || [])
     .map((c) => `${c.id}: ${c.name}`)
     .join(", ");
@@ -439,7 +472,7 @@ IMPORTANT: Return ONLY valid JSON. No markdown.`;
   };
 
   try {
-    const result = await model.generateContent([prompt, imagePart]);
+    const result = await generateWithFallback([prompt, imagePart]);
     const raw = result.response.text().trim();
     const clean = raw
       .replace(/^```json\s*/, "")
@@ -455,9 +488,6 @@ IMPORTANT: Return ONLY valid JSON. No markdown.`;
 // ── Chat Summarization ────────────────────────────────────────────────────────
 
 export async function summarizeConversation(messages) {
-  const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-
   const transcript = (messages || [])
     .filter((m) => m.content && m.message_type === "text")
     .slice(-50)
@@ -487,7 +517,7 @@ Return ONLY valid JSON:
 IMPORTANT: Return ONLY valid JSON. No markdown.`;
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await generateWithFallback(prompt);
     const raw = result.response.text().trim();
     const clean = raw
       .replace(/^```json\s*/, "")
@@ -511,9 +541,6 @@ export async function getSearchSuggestions(
   categories,
   recentSearches = [],
 ) {
-  const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-
   const categoryNames = (categories || []).map((c) => c.name).join(", ");
 
   const prompt = `You are a smart search assistant for Njimbong, a Cameroonian online marketplace.
@@ -530,7 +557,7 @@ Return ONLY valid JSON:
 IMPORTANT: Return ONLY valid JSON. No markdown.`;
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await generateWithFallback(prompt);
     const raw = result.response.text().trim();
     const clean = raw
       .replace(/^```json\s*/, "")
@@ -546,9 +573,6 @@ IMPORTANT: Return ONLY valid JSON. No markdown.`;
 // ── Generate SEO Listing Description ─────────────────────────────────────────
 
 export async function generateSEODescription(listing) {
-  const genAI = getClient();
-  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-
   const prompt = `You are an SEO copywriter for Njimbong, Cameroon's premier online marketplace.
 
 Write an SEO-optimized product listing description for:
@@ -567,7 +591,7 @@ Return ONLY valid JSON:
 IMPORTANT: Return ONLY valid JSON. No markdown.`;
 
   try {
-    const result = await model.generateContent(prompt);
+    const result = await generateWithFallback(prompt);
     const raw = result.response.text().trim();
     const clean = raw
       .replace(/^```json\s*/, "")
