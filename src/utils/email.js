@@ -1,14 +1,23 @@
 /**
  * email.js
- * SendGrid email service for Njimbong Marketplace.
+ * SMTP email service (Nodemailer + Hostinger mailbox) for Njimbong Marketplace.
  *
- * All emails are sent from support@njimbong.com.
+ * All emails are sent from support@njimbong.com (override with SMTP_FROM).
+ *
+ * Required env vars:
+ *   SMTP_USER  – full mailbox address, e.g. support@njimbong.com
+ *   SMTP_PASS  – mailbox password
+ * Optional env vars:
+ *   SMTP_HOST  – default "smtp.hostinger.com"
+ *   SMTP_PORT  – default 465 (SSL). Use 587 for STARTTLS.
+ *   SMTP_SECURE – "true"/"false"; defaults to true when port is 465
+ *   SMTP_FROM  – default "Njimbong <SMTP_USER>"
  * Templates are fully responsive, mobile-first HTML.
  * Every exported function is fire-and-forget safe — it logs errors
  * but never throws, so a mail failure never breaks a request.
  */
 
-import sgMail from "@sendgrid/mail";
+import nodemailer from "nodemailer";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -30,15 +39,49 @@ try {
   );
 }
 
-const FROM = "Njimbong <support@njimbong.com>";
+const SMTP_HOST = process.env.SMTP_HOST || "smtp.hostinger.com";
+const SMTP_PORT = Number(process.env.SMTP_PORT) || 465;
+const SMTP_SECURE = process.env.SMTP_SECURE
+  ? process.env.SMTP_SECURE === "true"
+  : SMTP_PORT === 465;
+const SMTP_USER = process.env.SMTP_USER;
+const SMTP_PASS = process.env.SMTP_PASS;
+
+// Hostinger rejects mail whose From address differs from the authenticated mailbox.
+const FROM =
+  process.env.SMTP_FROM || `Njimbong <${SMTP_USER || "support@njimbong.com"}>`;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "support@njimbong.com";
 const APP_URL =
   process.env.FRONTEND_URL?.split(",")[0].trim() || "https://njimbong.com";
 
-if (process.env.SENDGRID_API_KEY) {
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+let transporter = null;
+if (SMTP_USER && SMTP_PASS) {
+  transporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_SECURE,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+    pool: true,
+    maxConnections: 3,
+    connectionTimeout: 20_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 30_000,
+  });
+  transporter
+    .verify()
+    .then(() =>
+      console.log(`[Email] SMTP ready (${SMTP_HOST}:${SMTP_PORT}).`),
+    )
+    .catch((err) =>
+      console.error(
+        `[Email] SMTP connection check failed (${SMTP_HOST}:${SMTP_PORT}):`,
+        err.message,
+      ),
+    );
 } else {
-  console.warn("[Email] SENDGRID_API_KEY is not set. Emails will not be sent.");
+  console.warn(
+    "[Email] SMTP_USER / SMTP_PASS are not set. Emails will not be sent.",
+  );
 }
 
 // ─── Shared layout ────────────────────────────────────────────────────────────
@@ -193,7 +236,7 @@ const wrap = (title, body) => `<!DOCTYPE html>
 // ─── Internal send helper ─────────────────────────────────────────────────────
 
 async function send({ to, subject, html, attachments: extraAttachments = [] }) {
-  if (!process.env.SENDGRID_API_KEY) return;
+  if (!transporter) return;
   if (!to) {
     console.warn(
       `[Email] Skipping "${subject}" — recipient address is missing.`,
@@ -210,20 +253,21 @@ async function send({ to, subject, html, attachments: extraAttachments = [] }) {
     ? [
         {
           content: LOGO_BASE64,
+          encoding: "base64",
           filename: "logo.png",
-          type: "image/png",
-          disposition: "inline",
-          content_id: LOGO_CID,
+          contentType: "image/png",
+          contentDisposition: "inline",
+          cid: LOGO_CID,
         },
       ]
     : [];
   msg.attachments = [...logoAttachment, ...extraAttachments];
   try {
-    await sgMail.send(msg);
+    await transporter.sendMail(msg);
   } catch (err) {
     console.error(
       `[Email] Failed to send "${subject}" to ${to}:`,
-      err?.response?.body || err.message,
+      err?.response || err.message,
     );
   }
 }
@@ -1130,10 +1174,10 @@ export async function sendDisputeFiledToAdmin(
     });
     const filename = `dispute-transcript-${fonlokInvoiceId ?? orderId}.pdf`;
     pdfAttachment = {
-      content: pdfBuffer.toString("base64"),
+      content: pdfBuffer,
       filename,
-      type: "application/pdf",
-      disposition: "attachment",
+      contentType: "application/pdf",
+      contentDisposition: "attachment",
     };
   } catch (pdfErr) {
     console.error(
